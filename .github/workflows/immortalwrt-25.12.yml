@@ -335,36 +335,37 @@ jobs:
 
           echo "RTP2HTTPD installed."
 
-
       # ============================================================
-      # 13. Vlmcsd
-      #
-      # IMPORTANT:
-      # ImmortalWrt official feeds already provide vlmcsd.
-      #
-      # Do NOT import sbwml/openwrt_pkgs.
+      # 13. Vlmcsd / KMS
       # ============================================================
 
-      - name: Verify Vlmcsd
+      - name: Add Vlmcsd
+
         working-directory: ./immortalwrt
 
         run: |
-          echo "========================================"
-          echo "Checking official Vlmcsd packages"
-          echo "========================================"
+          rm -rf package/vlmcsd
 
-          grep -Rqs \
-            "Package/vlmcsd" \
-            package \
-            feeds
+          git clone \
+            --filter=blob:none \
+            --no-checkout \
+            --depth 1 \
+            https://github.com/sbwml/openwrt_pkgs.git \
+            package/vlmcsd
 
-          grep -Rqs \
-            "Package/luci-app-vlmcsd" \
-            package \
-            feeds
+          cd package/vlmcsd
 
-          echo "[OK] vlmcsd"
-          echo "[OK] luci-app-vlmcsd"
+          git sparse-checkout init --cone
+
+          git sparse-checkout set \
+            vlmcsd \
+            luci-app-vlmcsd
+
+          git checkout
+
+          cd ../..
+
+          echo "Vlmcsd source installed."
 
 
       # ============================================================
