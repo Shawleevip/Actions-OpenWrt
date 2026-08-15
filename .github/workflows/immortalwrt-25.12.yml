@@ -304,23 +304,44 @@ jobs:
 
 
       # ============================================================
-      # 11. Add Lucky
+      # 11. Lucky
       # ============================================================
 
       - name: Add Lucky
+
         working-directory: ./immortalwrt
 
         run: |
+          set -euxo pipefail
+
           rm -rf package/lucky
+
+          echo "========================================"
+          echo "Installing Lucky LuCI package"
+          echo "========================================"
 
           git clone \
             --depth 1 \
+            --single-branch \
+            --branch master \
             https://github.com/sirpdboy/luci-app-lucky.git \
             package/lucky
 
-          test -f package/lucky/Makefile
+          echo ""
+          echo "========================================"
+          echo "Lucky repository"
+          echo "========================================"
 
-          echo "Lucky installed."
+          cd package/lucky
+
+          git log -1 --oneline
+
+          echo ""
+          echo "Makefile:"
+          test -f Makefile
+
+          echo ""
+          echo "Lucky package installed successfully."
 
 
       # ============================================================
