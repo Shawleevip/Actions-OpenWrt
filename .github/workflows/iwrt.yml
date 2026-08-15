@@ -1,4 +1,4 @@
-name: Build ImmortalWrt x86_64
+name: Build ImmortalWrt 25.12 x86_64
 
 on:
   workflow_dispatch:
@@ -10,10 +10,11 @@ on:
         type: boolean
 
 permissions:
-  contents: write # 需要写入权限以创建 Release
+  contents: write
 
 env:
-  IMMORTAL_REF: master
+  # 请确认此标签是否存在，若不存在请改为 openwrt-23.05 或 master
+  IMMORTAL_REF: v25.12.1 
   IMMORTAL_DIR: immortalwrt
   TZ: Asia/Shanghai
 
@@ -24,13 +25,13 @@ jobs:
 
     steps:
       # ==========================================================
-      # 1. Checkout 当前仓库
+      # 1. Checkout
       # ==========================================================
       - name: Checkout
         uses: actions/checkout@v4
 
       # ==========================================================
-      # 2. 最大化构建空间 (清理无用环境)
+      # 2. Maximize build space
       # ==========================================================
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -45,7 +46,7 @@ jobs:
           remove-docker-images: 'true'
 
       # ==========================================================
-      # 3. 安装编译依赖
+      # 3. Install dependencies
       # ==========================================================
       - name: Install dependencies
         env:
@@ -63,7 +64,7 @@ jobs:
           sudo timedatectl set-timezone Asia/Shanghai
 
       # ==========================================================
-      # 4. 设置构建时间变量
+      # 4. Set build information
       # ==========================================================
       - name: Set build information
         run: |
@@ -71,7 +72,7 @@ jobs:
           echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
       # ==========================================================
-      # 5. 恢复 CCache 缓存 (加速二次编译)
+      # 5. Restore ccache
       # ==========================================================
       - name: Restore ccache
         uses: actions/cache@v4
@@ -82,7 +83,7 @@ jobs:
             immortalwrt-x86_64-${{ runner.os }}-ccache-
 
       # ==========================================================
-      # 6. 克隆 ImmortalWrt 源码
+      # 6. Clone ImmortalWrt
       # ==========================================================
       - name: Clone ImmortalWrt
         run: |
@@ -91,7 +92,7 @@ jobs:
           echo "Source Version: $(git describe --always --dirty)"
 
       # ==========================================================
-      # 7. 恢复下载缓存 (dl 目录)
+      # 7. Restore download cache
       # ==========================================================
       - name: Restore download cache
         uses: actions/cache@v4
@@ -102,7 +103,7 @@ jobs:
             immortalwrt-x86_64-${{ runner.os }}-dl-
 
       # ==========================================================
-      # 8. 配置第三方 Feeds (修正了 PassWall 源)
+      # 8. Configure feeds (关键修正：PassWall2 改为 master)
       # ==========================================================
       - name: Configure feeds
         working-directory: ./immortalwrt
@@ -113,33 +114,8 @@ jobs:
           src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;master
           EOF
 
-
       # ==========================================================
-      # 9. Update and install feeds (Explicit Order)
-      # ==========================================================
-      - name: Update and install feeds
-        working-directory: ./immortalwrt
-        run: |
-          echo "Updating base feeds..."
-          ./scripts/feeds update packages
-          ./scripts/feeds update luci
-          
-          echo "Updating PassWall feeds..."
-          ./scripts/feeds update passwall
-          ./scripts/feeds update passwall_packages
-          ./scripts/feeds update passwall2
-          
-          echo "Installing PassWall packages..."
-          ./scripts/feeds install -p passwall_packages -a
-          ./scripts/feeds install -p passwall -a
-          ./scripts/feeds install -p passwall2 -a
-          
-          echo "Checking directory structure..."
-          ls -l feeds/passwall2 || echo "WARNING: passwall2 dir missing!"
-          ls -l feeds/passwall_packages || echo "WARNING: passwall_packages dir missing!"
-          
-      # ==========================================================
-      # 9. 更新并安装 Feeds
+      # 9. Update and install feeds
       # ==========================================================
       - name: Update and install feeds
         working-directory: ./immortalwrt
@@ -147,16 +123,10 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # ==========================================================
-      # 10. 冻结第三方 Feeds (防止运行时拉取)
-      # ==========================================================
-      - name: Freeze third-party feeds
-        working-directory: ./immortalwrt
-        run: |
-          sed -i -e '/^src-git passwall /d' -e '/^src-git passwall_packages /d' -e '/^src-git passwall2 /d' feeds.conf.default
+      # [已移除] Step 10: Freeze feeds (这是导致报错的原因)
 
       # ==========================================================
-      # 11. 克隆自定义插件 (优化了克隆逻辑)
+      # 10. Add Custom Plugins (回归简单直接的克隆方式)
       # ==========================================================
       - name: Add OpenClash
         working-directory: ./immortalwrt
@@ -168,10 +138,7 @@ jobs:
         working-directory: ./immortalwrt
         run: |
           rm -rf package/lucky package/luci-app-lucky
-          git clone --depth 1 https://github.com/sirpdboy/luci-app-lucky.git package/lucky-temp
-          cp -a package/lucky-temp/lucky package/lucky
-          cp -a package/lucky-temp/luci-app-lucky package/luci-app-lucky
-          rm -rf package/lucky-temp
+          git clone --depth 1 https://github.com/sirpdboy/luci-app-lucky.git package/luci-app-lucky
 
       - name: Add RTP2HTTPD
         working-directory: ./immortalwrt
@@ -179,12 +146,11 @@ jobs:
           rm -rf package/rtp2httpd
           git clone --depth 1 https://github.com/stackia/rtp2httpd.git package/rtp2httpd
 
-      - name: Add Vlmcsd (KMS)
+      - name: Add Vlmcsd
         working-directory: ./immortalwrt
         run: |
           rm -rf package/vlmcsd package/luci-app-vlmcsd
-          git clone --filter=blob:none --no-checkout --depth 1 https://github.com/sbwml/openwrt_pkgs.git /tmp/sbwml
-          cd /tmp/sbwml && git sparse-checkout init --cone && git sparse-checkout set vlmcsd luci-app-vlmcsd && git checkout
+          git clone --depth 1 https://github.com/sbwml/openwrt_pkgs.git /tmp/sbwml
           cp -a /tmp/sbwml/vlmcsd package/vlmcsd
           cp -a /tmp/sbwml/luci-app-vlmcsd package/luci-app-vlmcsd
           rm -rf /tmp/sbwml
@@ -203,80 +169,59 @@ jobs:
           git clone --depth 1 https://github.com/lisaac/luci-app-diskman.git package/diskman
 
       # ==========================================================
-      # 12. 准备包符号链接
+      # 11. Prepare package symlinks
       # ==========================================================
       - name: Prepare package symlinks
         working-directory: ./immortalwrt
         run: make package/symlinks
 
       # ==========================================================
-      # 13. 生成 .config 配置文件 (已去重并整理)
+      # 12. Generate configuration
       # ==========================================================
       - name: Generate configuration
         working-directory: ./immortalwrt
         run: |
           rm -f .config
           cat > .config <<'EOF'
-          # 目标架构
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_DEVICE_generic=y
-          
-          # 固件分区与格式 (EFI 启动)
           CONFIG_TARGET_KERNEL_PARTSIZE=128
           CONFIG_TARGET_ROOTFS_PARTSIZE=640
           CONFIG_TARGET_IMAGES_GZIP=y
           CONFIG_GRUB_EFI_IMAGES=y
-          
-          # LuCI 基础与中文
           CONFIG_PACKAGE_luci=y
           CONFIG_PACKAGE_luci-ssl=y
           CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
           CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
-          
-          # IPv6 支持
           CONFIG_PACKAGE_dnsmasq-full=y
           CONFIG_PACKAGE_ipv6helper=y
           CONFIG_PACKAGE_odhcp6c=y
           CONFIG_PACKAGE_odhcpd-ipv6only=y
           CONFIG_PACKAGE_luci-proto-ipv6=y
-          
-          # 文件系统 (NFS, NTFS3)
           CONFIG_PACKAGE_kmod-fs-nfs=y
           CONFIG_PACKAGE_kmod-fs-nfs-common=y
           CONFIG_PACKAGE_kmod-fs-nfs-v3=y
           CONFIG_PACKAGE_kmod-fs-nfs-v4=y
           CONFIG_PACKAGE_kmod-fs-ntfs3=y
-          
-          # USB 支持
           CONFIG_PACKAGE_kmod-usb-ohci=y
           CONFIG_PACKAGE_kmod-usb-ohci-pci=y
           CONFIG_PACKAGE_kmod-usb2=y
           CONFIG_PACKAGE_kmod-usb2-pci=y
           CONFIG_PACKAGE_kmod-usb3=y
-          
-          # 网卡聚合
           CONFIG_PACKAGE_kmod-bonding=y
-          
-          # SQM / CAKE 流量控制
           CONFIG_PACKAGE_luci-app-sqm=y
           CONFIG_PACKAGE_sqm-scripts=y
           CONFIG_PACKAGE_kmod-sched-cake=y
           CONFIG_PACKAGE_kmod-ifb=y
           CONFIG_PACKAGE_tc-full=y
-          
-          # OpenVPN
           CONFIG_PACKAGE_luci-app-openvpn=y
           CONFIG_PACKAGE_openvpn-openssl=y
           CONFIG_PACKAGE_openvpn-easy-rsa=y
-          
-          # WireGuard
           CONFIG_PACKAGE_kmod-wireguard=y
           CONFIG_PACKAGE_wireguard-tools=y
           CONFIG_PACKAGE_luci-app-wireguard=y
           CONFIG_PACKAGE_luci-proto-wireguard=y
-          
-          # OpenClash 及其依赖
           CONFIG_PACKAGE_luci-app-openclash=y
           CONFIG_PACKAGE_bash=y
           CONFIG_PACKAGE_coreutils-nohup=y
@@ -289,44 +234,24 @@ jobs:
           CONFIG_PACKAGE_unzip=y
           CONFIG_PACKAGE_kmod-nft-tproxy=y
           CONFIG_PACKAGE_kmod-nft-socket=y
-          
-          # PassWall2 及其依赖
           CONFIG_PACKAGE_luci-app-passwall2=y
           CONFIG_PACKAGE_luci-i18n-passwall2-zh-cn=y
           CONFIG_PACKAGE_xray-core=y
           CONFIG_PACKAGE_sing-box=y
-          
-          # Lucky
           CONFIG_PACKAGE_luci-app-lucky=y
           CONFIG_PACKAGE_lucky=y
-          
-          # RTP2HTTPD
           CONFIG_PACKAGE_luci-app-rtp2httpd=y
           CONFIG_PACKAGE_rtp2httpd=y
-          
-          # Vlmcsd (KMS 激活)
           CONFIG_PACKAGE_vlmcsd=y
           CONFIG_PACKAGE_luci-app-vlmcsd=y
-          
-          # Argon 主题
           CONFIG_PACKAGE_luci-theme-argon=y
           CONFIG_PACKAGE_luci-app-argon-config=y
-          
-          # Diskman (磁盘管理)
           CONFIG_PACKAGE_luci-app-diskman=y
-          
-          # UPnP
           CONFIG_PACKAGE_miniupnpd-nftables=y
           CONFIG_PACKAGE_luci-app-upnp=y
-          
-          # IRQ 负载均衡
           CONFIG_PACKAGE_irqbalance=y
           CONFIG_PACKAGE_luci-app-irqbalance=y
-          
-          # TTYD (网页终端)
           CONFIG_PACKAGE_luci-app-ttyd=y
-          
-          # 常用网络与诊断工具
           CONFIG_PACKAGE_htop=y
           CONFIG_PACKAGE_nano=y
           CONFIG_PACKAGE_screen=y
@@ -340,34 +265,28 @@ jobs:
           CONFIG_PACKAGE_tcpdump=y
           CONFIG_PACKAGE_pv=y
           CONFIG_PACKAGE_bind-host=y
-          
-          # ESXi 虚拟机工具
           CONFIG_PACKAGE_open-vm-tools=y
-          
-          # 防火墙 (fw4)
           CONFIG_PACKAGE_firewall4=y
-          
-          # 启用 CCache 加速
           CONFIG_CCACHE=y
           EOF
           make defconfig
 
       # ==========================================================
-      # 14. 检查先决条件
+      # 13. Check prerequisites
       # ==========================================================
       - name: Check prerequisites
         working-directory: ./immortalwrt
         run: make prereq
 
       # ==========================================================
-      # 15. 下载源码包
+      # 14. Download sources
       # ==========================================================
       - name: Download sources
         working-directory: ./immortalwrt
         run: make download -j8 V=s
 
       # ==========================================================
-      # 16. 编译固件
+      # 15. Compile firmware
       # ==========================================================
       - name: Compile firmware
         working-directory: ./immortalwrt
@@ -381,7 +300,7 @@ jobs:
           echo "========================================"
 
       # ==========================================================
-      # 17. 整理产物 (同时提取 img.gz 和 img)
+      # 16. Prepare artifacts
       # ==========================================================
       - name: Prepare artifacts
         working-directory: ./immortalwrt
@@ -391,7 +310,6 @@ jobs:
           rm -rf artifact
           mkdir -p artifact/firmware artifact/buildinfo
           
-          # 查找 EFI 镜像
           EFI_GZ="$(find "$TARGET" -maxdepth 1 -type f -name '*generic-squashfs-combined-efi.img.gz' | head -n 1)"
           EFI_IMG="$(find "$TARGET" -maxdepth 1 -type f -name '*generic-squashfs-combined-efi.img' | head -n 1)"
           
@@ -414,7 +332,7 @@ jobs:
           find "$TARGET" -maxdepth 1 -type f \( -name '*.buildinfo' -o -name '*.manifest' \) -exec cp {} artifact/buildinfo/ \;
 
       # ==========================================================
-      # 18. 上传至 GitHub Actions Artifacts (临时存储)
+      # 17. Upload firmware artifact
       # ==========================================================
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
@@ -424,7 +342,7 @@ jobs:
           retention-days: 7
 
       # ==========================================================
-      # 19. 上传至 GitHub Release (永久存储，可选)
+      # 18. Create Release
       # ==========================================================
       - name: Create Release
         if: github.event.inputs.upload_release == 'true'
@@ -435,8 +353,6 @@ jobs:
           body: |
             自动编译的 ImmortalWrt x86_64 固件。
             构建时间: ${{ env.BUILD_TIME }}
-            包含插件: OpenClash, PassWall2, Lucky, Argon, Diskman, KMS 等。
-            针对 ESXi 环境优化 (open-vm-tools)。
           files: ./immortalwrt/artifact/firmware/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
