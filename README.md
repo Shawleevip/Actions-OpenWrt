@@ -4,5 +4,7 @@
 - [OpenWrt](https://github.com/openwrt/openwrt)
 
 OpenWrt 25.12.5 x86_64
+
 Official OpenWrt source
+
 Custom GitHub Actions build
