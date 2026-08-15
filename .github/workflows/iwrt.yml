@@ -1,4 +1,4 @@
-name: Build ImmortalWrt 25.12 x86_64
+name: Build ImmortalWrt 25.12 x86_64 (Final Fix)
 
 on:
   workflow_dispatch:
@@ -13,7 +13,6 @@ permissions:
   contents: write
 
 env:
-  # 请确认此标签是否存在，若不存在请改为 openwrt-23.05 或 master
   IMMORTAL_REF: v25.12.1 
   IMMORTAL_DIR: immortalwrt
   TZ: Asia/Shanghai
@@ -24,15 +23,9 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # ==========================================================
-      # 1. Checkout
-      # ==========================================================
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ==========================================================
-      # 2. Maximize build space
-      # ==========================================================
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
@@ -45,9 +38,6 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      # ==========================================================
-      # 3. Install dependencies
-      # ==========================================================
       - name: Install dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -63,17 +53,11 @@ jobs:
             squashfs-tools subversion swig texinfo uglifyjs unzip vim wget xmlto xxd zlib1g-dev scdoc zstd
           sudo timedatectl set-timezone Asia/Shanghai
 
-      # ==========================================================
-      # 4. Set build information
-      # ==========================================================
       - name: Set build information
         run: |
           echo "BUILD_DATE=$(date +'%Y.%m.%d-%H%M')" >> "$GITHUB_ENV"
           echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
-      # ==========================================================
-      # 5. Restore ccache
-      # ==========================================================
       - name: Restore ccache
         uses: actions/cache@v4
         with:
@@ -82,18 +66,12 @@ jobs:
           restore-keys: |
             immortalwrt-x86_64-${{ runner.os }}-ccache-
 
-      # ==========================================================
-      # 6. Clone ImmortalWrt
-      # ==========================================================
       - name: Clone ImmortalWrt
         run: |
           git clone --depth 1 --branch "$IMMORTAL_REF" https://github.com/immortalwrt/immortalwrt.git "$IMMORTAL_DIR"
           cd "$IMMORTAL_DIR"
           echo "Source Version: $(git describe --always --dirty)"
 
-      # ==========================================================
-      # 7. Restore download cache
-      # ==========================================================
       - name: Restore download cache
         uses: actions/cache@v4
         with:
@@ -103,30 +81,56 @@ jobs:
             immortalwrt-x86_64-${{ runner.os }}-dl-
 
       # ==========================================================
-      # 8. Configure feeds (关键修正：PassWall2 改为 master)
+      # 关键修正区域：Feed 配置与更新
       # ==========================================================
       - name: Configure feeds
         working-directory: ./immortalwrt
         run: |
+          # 1. 添加源
           cat >> feeds.conf.default <<'EOF'
           src-git passwall https://github.com/xiaorouji/openwrt-passwall.git;main
           src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main
           src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;master
           EOF
 
-      # ==========================================================
-      # 9. Update and install feeds
-      # ==========================================================
-      - name: Update and install feeds
+      - name: Update and install feeds (Robust Mode)
         working-directory: ./immortalwrt
         run: |
-          ./scripts/feeds update -a
+          # 2. 清理旧的临时文件和索引，防止缓存污染
+          rm -rf tmp/
+          
+          # 3. 更新基础源
+          ./scripts/feeds update packages
+          ./scripts/feeds update luci
+          
+          # 4. 更新 PassWall 源 (显式指定分支，确保克隆成功)
+          echo "Updating passwall..."
+          ./scripts/feeds update passwall
+          echo "Updating passwall_packages..."
+          ./scripts/feeds update passwall_packages
+          echo "Updating passwall2..."
+          ./scripts/feeds update passwall2
+          
+          # 5. 验证目录是否存在 (调试用)
+          if [ ! -d "feeds/passwall2" ]; then
+            echo "ERROR: feeds/passwall2 directory was not created!"
+            ls -l feeds/
+            exit 1
+          fi
+          
+          # 6. 按依赖顺序安装
+          # 先安装 passwall_packages (因为 passwall2 依赖它)
+          ./scripts/feeds install -p passwall_packages -a
+          # 再安装 passwall2
+          ./scripts/feeds install -p passwall2 -a
+          # 最后安装 passwall (如果需要)
+          ./scripts/feeds install -p passwall -a
+          
+          # 7. 安装其他默认源
           ./scripts/feeds install -a
 
-      # [已移除] Step 10: Freeze feeds (这是导致报错的原因)
-
       # ==========================================================
-      # 10. Add Custom Plugins (回归简单直接的克隆方式)
+      # 插件添加 (保持简单)
       # ==========================================================
       - name: Add OpenClash
         working-directory: ./immortalwrt
@@ -168,16 +172,10 @@ jobs:
           rm -rf package/diskman
           git clone --depth 1 https://github.com/lisaac/luci-app-diskman.git package/diskman
 
-      # ==========================================================
-      # 11. Prepare package symlinks
-      # ==========================================================
       - name: Prepare package symlinks
         working-directory: ./immortalwrt
         run: make package/symlinks
 
-      # ==========================================================
-      # 12. Generate configuration
-      # ==========================================================
       - name: Generate configuration
         working-directory: ./immortalwrt
         run: |
@@ -271,23 +269,14 @@ jobs:
           EOF
           make defconfig
 
-      # ==========================================================
-      # 13. Check prerequisites
-      # ==========================================================
       - name: Check prerequisites
         working-directory: ./immortalwrt
         run: make prereq
 
-      # ==========================================================
-      # 14. Download sources
-      # ==========================================================
       - name: Download sources
         working-directory: ./immortalwrt
         run: make download -j8 V=s
 
-      # ==========================================================
-      # 15. Compile firmware
-      # ==========================================================
       - name: Compile firmware
         working-directory: ./immortalwrt
         run: |
@@ -299,9 +288,6 @@ jobs:
           echo "Build Finished"
           echo "========================================"
 
-      # ==========================================================
-      # 16. Prepare artifacts
-      # ==========================================================
       - name: Prepare artifacts
         working-directory: ./immortalwrt
         run: |
@@ -331,9 +317,6 @@ jobs:
           
           find "$TARGET" -maxdepth 1 -type f \( -name '*.buildinfo' -o -name '*.manifest' \) -exec cp {} artifact/buildinfo/ \;
 
-      # ==========================================================
-      # 17. Upload firmware artifact
-      # ==========================================================
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
@@ -341,9 +324,6 @@ jobs:
           path: ./immortalwrt/artifact/firmware/*
           retention-days: 7
 
-      # ==========================================================
-      # 18. Create Release
-      # ==========================================================
       - name: Create Release
         if: github.event.inputs.upload_release == 'true'
         uses: softprops/action-gh-release@v1
