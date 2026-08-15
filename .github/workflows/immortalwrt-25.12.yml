@@ -48,16 +48,14 @@ jobs:
 
 
       # ============================================================
-      # 3. Install build dependencies
+      # 3. Build dependencies
       # ============================================================
 
       - name: Install dependencies
-
         env:
           DEBIAN_FRONTEND: noninteractive
 
         run: |
-
           sudo rm -rf \
             /usr/share/dotnet \
             /usr/local/lib/android \
@@ -147,9 +145,7 @@ jobs:
       # ============================================================
 
       - name: Set build information
-
         run: |
-
           echo "BUILD_DATE=$(date +'%Y.%m.%d-%H%M')" >> "$GITHUB_ENV"
           echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
@@ -159,11 +155,9 @@ jobs:
       # ============================================================
 
       - name: Restore ccache
-
         uses: actions/cache@v4
 
         with:
-
           path: ~/.ccache
 
           key: immortalwrt-25.12-x86_64-${{ runner.os }}-ccache-${{ hashFiles('.github/workflows/immortalwrt-25.12.yml') }}
@@ -177,9 +171,7 @@ jobs:
       # ============================================================
 
       - name: Clone ImmortalWrt
-
         run: |
-
           git clone \
             --depth 1 \
             --branch "$IMMORTAL_BRANCH" \
@@ -193,17 +185,10 @@ jobs:
           echo "========================================"
 
           git log -1 --oneline
-
           git describe --always --dirty
 
           echo ""
-
-          echo "Git branch:"
-          git branch --show-current
-
-          echo ""
-
-          echo "Kernel information:"
+          echo "Kernel configuration:"
           grep -R \
             "LINUX_VERSION" \
             include \
@@ -219,12 +204,10 @@ jobs:
       # 7. Restore download cache
       # ============================================================
 
-      - name: Restore ImmortalWrt download cache
-
+      - name: Restore download cache
         uses: actions/cache@v4
 
         with:
-
           path: |
             immortalwrt/dl
 
@@ -239,114 +222,85 @@ jobs:
       # ============================================================
 
       - name: Update official feeds
-
         working-directory: ./immortalwrt
 
         run: |
-
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
 
       # ============================================================
-      # 9. Add PassWall2 package feed
+      # 9. Add OpenClash
       #
-      # PassWall2 本体 + 独立依赖包
-      # ============================================================
-
-      - name: Add PassWall2 feeds
-
-        working-directory: ./immortalwrt
-
-        run: |
-
-          set -e
-
-          echo "========================================"
-          echo "Adding PassWall2 feeds"
-          echo "========================================"
-
-          grep -q '^src-git passwall_packages ' feeds.conf.default \
-            || echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git" >> feeds.conf.default
-
-          grep -q '^src-git passwall2 ' feeds.conf.default \
-            || echo "src-git passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git" >> feeds.conf.default
-
-          ./scripts/feeds update passwall_packages
-          ./scripts/feeds update passwall2
-
-          ./scripts/feeds install -a -p passwall_packages
-          ./scripts/feeds install -a -p passwall2
-
-          echo ""
-          echo "PassWall2 feeds installed."
-
-
-      # ============================================================
-      # 10. Add OpenClash
+      # IMPORTANT:
+      # OpenClash repository contains:
       #
-      # OpenClash 官方仓库结构：
+      # luci-app-openclash/
       #
-      # OpenClash/
-      # └── luci-app-openclash/
-      #
-      # 使用 sparse checkout，只取真正的 package。
+      # Therefore clone repository to temporary location and copy
+      # the actual package directory into package/.
       # ============================================================
 
       - name: Add OpenClash
-
         working-directory: ./immortalwrt
 
         run: |
-
-          set -e
-
-          rm -rf package/luci-app-openclash
           rm -rf /tmp/openclash
 
           git clone \
             --depth 1 \
-            --filter=blob:none \
-            --sparse \
             https://github.com/vernesong/OpenClash.git \
             /tmp/openclash
 
-          cd /tmp/openclash
-
-          git sparse-checkout set \
-            luci-app-openclash
-
-          cd -
-
-          if [ ! -f /tmp/openclash/luci-app-openclash/Makefile ]; then
-
-            echo "ERROR: OpenClash Makefile not found."
-
-            find /tmp/openclash \
-              -maxdepth 4 \
-              -type f \
-              -name Makefile \
-              -print
-
-            exit 1
-
-          fi
+          rm -rf package/luci-app-openclash
 
           cp -a \
             /tmp/openclash/luci-app-openclash \
             package/luci-app-openclash
 
-          rm -rf /tmp/openclash
-
           echo "========================================"
           echo "OpenClash package"
           echo "========================================"
 
-          find package/luci-app-openclash \
-            -maxdepth 2 \
-            -type f \
+          test -f package/luci-app-openclash/Makefile
+
+          grep '^PKG_NAME' \
+            package/luci-app-openclash/Makefile
+
+          echo "OpenClash package installed."
+
+
+      # ============================================================
+      # 10. Add PassWall2
+      # ============================================================
+
+      - name: Add PassWall2
+        working-directory: ./immortalwrt
+
+        run: |
+          rm -rf /tmp/passwall2
+
+          git clone \
+            --depth 1 \
+            https://github.com/Openwrt-Passwall/openwrt-passwall2.git \
+            /tmp/passwall2
+
+          rm -rf package/passwall2
+
+          cp -a \
+            /tmp/passwall2 \
+            package/passwall2
+
+          echo "========================================"
+          echo "PassWall2"
+          echo "========================================"
+
+          find package/passwall2 \
+            -maxdepth 3 \
             -name Makefile \
             -print
+
+          echo "PassWall2 source installed."
 
 
       # ============================================================
@@ -354,11 +308,9 @@ jobs:
       # ============================================================
 
       - name: Add Lucky
-
         working-directory: ./immortalwrt
 
         run: |
-
           rm -rf package/lucky
 
           git clone \
@@ -366,17 +318,19 @@ jobs:
             https://github.com/sirpdboy/luci-app-lucky.git \
             package/lucky
 
+          test -f package/lucky/Makefile
+
+          echo "Lucky installed."
+
 
       # ============================================================
       # 12. Add RTP2HTTPD
       # ============================================================
 
       - name: Add RTP2HTTPD
-
         working-directory: ./immortalwrt
 
         run: |
-
           rm -rf package/rtp2httpd
 
           git clone \
@@ -384,49 +338,38 @@ jobs:
             https://github.com/stackia/rtp2httpd.git \
             package/rtp2httpd
 
+          echo "RTP2HTTPD installed."
+
 
       # ============================================================
-      # 13. Add Vlmcsd / KMS
+      # 13. Vlmcsd
+      #
+      # IMPORTANT:
+      # ImmortalWrt official feeds already provide vlmcsd.
+      #
+      # Do NOT import sbwml/openwrt_pkgs.
       # ============================================================
 
-      - name: Add Vlmcsd
-
+      - name: Verify Vlmcsd
         working-directory: ./immortalwrt
 
         run: |
-
-          set -e
-
-          rm -rf package/vlmcsd
-
-          git clone \
-            --filter=blob:none \
-            --no-checkout \
-            --depth 1 \
-            https://github.com/sbwml/openwrt_pkgs.git \
-            package/vlmcsd
-
-          cd package/vlmcsd
-
-          git sparse-checkout init --cone
-
-          git sparse-checkout set \
-            vlmcsd \
-            luci-app-vlmcsd
-
-          git checkout
-
-          cd ../..
-
           echo "========================================"
-          echo "Vlmcsd Makefiles"
+          echo "Checking official Vlmcsd packages"
           echo "========================================"
 
-          find package/vlmcsd \
-            -maxdepth 3 \
-            -type f \
-            -name Makefile \
-            -print
+          grep -Rqs \
+            "Package/vlmcsd" \
+            package \
+            feeds
+
+          grep -Rqs \
+            "Package/luci-app-vlmcsd" \
+            package \
+            feeds
+
+          echo "[OK] vlmcsd"
+          echo "[OK] luci-app-vlmcsd"
 
 
       # ============================================================
@@ -434,11 +377,9 @@ jobs:
       # ============================================================
 
       - name: Add Argon
-
         working-directory: ./immortalwrt
 
         run: |
-
           rm -rf \
             package/luci-theme-argon \
             package/luci-app-argon-config
@@ -453,17 +394,20 @@ jobs:
             https://github.com/jerrykuku/luci-app-argon-config.git \
             package/luci-app-argon-config
 
+          test -f package/luci-theme-argon/Makefile
+          test -f package/luci-app-argon-config/Makefile
+
+          echo "Argon installed."
+
 
       # ============================================================
-      # 15. Add Diskman
+      # 15. Diskman
       # ============================================================
 
       - name: Add Diskman
-
         working-directory: ./immortalwrt
 
         run: |
-
           rm -rf package/diskman
 
           git clone \
@@ -471,82 +415,101 @@ jobs:
             https://github.com/lisaac/luci-app-diskman.git \
             package/diskman
 
+          echo "Diskman installed."
+
 
       # ============================================================
       # 16. Prepare package symlinks
       # ============================================================
 
-      - name: Prepare packages
-
+      - name: Prepare package symlinks
         working-directory: ./immortalwrt
 
         run: |
-
           make package/symlinks
 
 
       # ============================================================
-      # 17. Verify third-party package definitions
+      # 17. Verify third-party packages
       #
-      # 这一阶段必须在 make download 之前完成。
+      # IMPORTANT:
+      # Do not use the old grep-only test.
+      #
+      # We explicitly inspect Makefiles.
       # ============================================================
 
       - name: Verify package definitions
-
         working-directory: ./immortalwrt
 
         run: |
-
           set -e
 
           echo "========================================"
-          echo "Checking third-party packages"
+          echo "Checking package definitions"
           echo "========================================"
 
           check_package() {
+            NAME="$1"
+            PATH="$2"
 
-            PACKAGE="$1"
-
-            if grep -Rqs \
-              "^define Package/$PACKAGE" \
-              package \
-              feeds \
-              2>/dev/null; then
-
-              echo "[OK] $PACKAGE"
-
-            else
-
-              echo "[ERROR] Package not found: $PACKAGE"
-
-              echo ""
-              echo "Possible Makefiles:"
-              
-              grep -R \
-                "Package/.*$PACKAGE" \
-                package \
-                feeds \
-                2>/dev/null \
-                | head -20 \
-                || true
-
+            if [ ! -f "$PATH/Makefile" ]; then
+              echo "[ERROR] $NAME Makefile not found:"
+              echo "        $PATH/Makefile"
               exit 1
-
             fi
+
+            echo "[OK] $NAME"
+            grep -m1 '^PKG_NAME' "$PATH/Makefile" || true
           }
 
-          check_package "luci-app-openclash"
-          check_package "luci-app-passwall2"
-          check_package "luci-app-lucky"
-          check_package "luci-app-rtp2httpd"
-          check_package "vlmcsd"
-          check_package "luci-app-vlmcsd"
-          check_package "luci-theme-argon"
-          check_package "luci-app-argon-config"
-          check_package "luci-app-diskman"
+          check_package \
+            "OpenClash" \
+            "package/luci-app-openclash"
+
+          check_package \
+            "PassWall2" \
+            "package/passwall2"
+
+          check_package \
+            "Lucky" \
+            "package/lucky"
+
+          check_package \
+            "RTP2HTTPD" \
+            "package/rtp2httpd"
+
+          check_package \
+            "Argon theme" \
+            "package/luci-theme-argon"
+
+          check_package \
+            "Argon config" \
+            "package/luci-app-argon-config"
+
+          check_package \
+            "Diskman" \
+            "package/diskman"
 
           echo ""
-          echo "All required package definitions found."
+          echo "========================================"
+          echo "Checking official Vlmcsd"
+          echo "========================================"
+
+          grep -Rqs \
+            "Package/vlmcsd" \
+            package \
+            feeds
+
+          grep -Rqs \
+            "Package/luci-app-vlmcsd" \
+            package \
+            feeds
+
+          echo "[OK] vlmcsd"
+          echo "[OK] luci-app-vlmcsd"
+
+          echo ""
+          echo "All package definitions verified."
 
 
       # ============================================================
@@ -554,7 +517,6 @@ jobs:
       # ============================================================
 
       - name: Generate configuration
-
         working-directory: ./immortalwrt
 
         run: |
@@ -577,7 +539,7 @@ jobs:
           # ========================================================
 
           CONFIG_TARGET_KERNEL_PARTSIZE=128
-          CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+          CONFIG_TARGET_ROOTFS_PARTSIZE=640
 
 
           # ========================================================
@@ -609,7 +571,7 @@ jobs:
 
 
           # ========================================================
-          # Filesystem
+          # Filesystems
           # ========================================================
 
           CONFIG_PACKAGE_kmod-fs-nfs=y
@@ -673,15 +635,29 @@ jobs:
 
           CONFIG_PACKAGE_luci-app-openclash=y
 
+          # OpenClash dependencies
+          CONFIG_PACKAGE_bash=y
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_ca-bundle=y
+          CONFIG_PACKAGE_ip-full=y
+          CONFIG_PACKAGE_ruby=y
+          CONFIG_PACKAGE_ruby-yaml=y
+          CONFIG_PACKAGE_kmod-tun=y
+          CONFIG_PACKAGE_unzip=y
+
 
           # ========================================================
           # PassWall2
-          #
-          # 不在这里强制 xray-core / sing-box，
-          # 由 PassWall2 feed 依赖关系解决。
           # ========================================================
 
           CONFIG_PACKAGE_luci-app-passwall2=y
+
+          CONFIG_PACKAGE_xray-core=y
+          CONFIG_PACKAGE_sing-box=y
+          CONFIG_PACKAGE_coreutils-nohup=y
+
+          CONFIG_PACKAGE_kmod-nft-tproxy=y
+          CONFIG_PACKAGE_kmod-nft-socket=y
 
 
           # ========================================================
@@ -700,6 +676,7 @@ jobs:
 
           # ========================================================
           # Vlmcsd / KMS
+          # Official ImmortalWrt package
           # ========================================================
 
           CONFIG_PACKAGE_vlmcsd=y
@@ -725,8 +702,6 @@ jobs:
           # Common tools
           # ========================================================
 
-          CONFIG_PACKAGE_curl=y
-          CONFIG_PACKAGE_ca-bundle=y
           CONFIG_PACKAGE_htop=y
           CONFIG_PACKAGE_nano=y
           CONFIG_PACKAGE_screen=y
@@ -741,6 +716,13 @@ jobs:
           CONFIG_PACKAGE_tcpdump=y
           CONFIG_PACKAGE_pv=y
           CONFIG_PACKAGE_bind-host=y
+
+
+          # ========================================================
+          # ESXi
+          # ========================================================
+
+          CONFIG_PACKAGE_open-vm-tools=y
 
 
           # ========================================================
@@ -774,6 +756,10 @@ jobs:
           EOF
 
 
+          # Remove indentation introduced by YAML block
+          sed -i 's/^[[:space:]]*//' .config
+
+
           # ========================================================
           # Resolve dependencies
           # ========================================================
@@ -787,7 +773,7 @@ jobs:
           echo "========================================"
 
           grep -E \
-            '^CONFIG_PACKAGE_(luci-app-openclash|luci-app-passwall2|luci-app-lucky|luci-app-rtp2httpd|vlmcsd|luci-app-vlmcsd|luci-app-sqm|openvpn-openssl|wireguard-tools|luci-theme-argon|luci-app-argon-config|luci-app-diskman)' \
+            '^CONFIG_PACKAGE_(luci-app-openclash|luci-app-passwall2|luci-app-lucky|luci-app-rtp2httpd|vlmcsd|luci-app-vlmcsd|luci-app-sqm|openvpn-openssl|wireguard-tools|luci-theme-argon|sing-box|xray-core|open-vm-tools)' \
             .config \
             || true
 
@@ -808,7 +794,6 @@ jobs:
       # ============================================================
 
       - name: Verify final configuration
-
         working-directory: ./immortalwrt
 
         run: |
@@ -832,24 +817,36 @@ jobs:
 
             "CONFIG_PACKAGE_luci-app-openclash=y"
             "CONFIG_PACKAGE_luci-app-passwall2=y"
-            "CONFIG_PACKAGE_luci-app-lucky=y"
-            "CONFIG_PACKAGE_luci-app-sqm=y"
-            "CONFIG_PACKAGE_luci-app-openvpn=y"
 
-            "CONFIG_PACKAGE_wireguard-tools=y"
+            "CONFIG_PACKAGE_luci-app-lucky=y"
+            "CONFIG_PACKAGE_luci-app-rtp2httpd=y"
+
+            "CONFIG_PACKAGE_vlmcsd=y"
+            "CONFIG_PACKAGE_luci-app-vlmcsd=y"
 
             "CONFIG_PACKAGE_luci-theme-argon=y"
             "CONFIG_PACKAGE_luci-app-argon-config=y"
 
-            "CONFIG_PACKAGE_luci-app-vlmcsd=y"
+            "CONFIG_PACKAGE_luci-app-diskman=y"
+
+            "CONFIG_PACKAGE_luci-app-sqm=y"
+            "CONFIG_PACKAGE_kmod-sched-cake=y"
+
+            "CONFIG_PACKAGE_luci-app-openvpn=y"
+            "CONFIG_PACKAGE_wireguard-tools=y"
+
+            "CONFIG_PACKAGE_sing-box=y"
+            "CONFIG_PACKAGE_xray-core=y"
 
           )
+
 
           for config in "${required_configs[@]}"; do
 
             if ! grep -qx "$config" .config; then
 
-              echo "[ERROR] Missing configuration: $config"
+              echo "[ERROR] Missing configuration:"
+              echo "        $config"
 
               exit 1
 
@@ -858,6 +855,7 @@ jobs:
             echo "[OK] $config"
 
           done
+
 
           echo ""
           echo "Final configuration verified."
@@ -868,11 +866,9 @@ jobs:
       # ============================================================
 
       - name: Check prerequisites
-
         working-directory: ./immortalwrt
 
         run: |
-
           make prereq
 
 
@@ -881,11 +877,9 @@ jobs:
       # ============================================================
 
       - name: Download sources
-
         working-directory: ./immortalwrt
 
         run: |
-
           make download -j8 V=s
 
 
@@ -894,7 +888,6 @@ jobs:
       # ============================================================
 
       - name: Compile firmware
-
         working-directory: ./immortalwrt
 
         run: |
@@ -909,16 +902,16 @@ jobs:
 
           echo "========================================"
           echo "ImmortalWrt build finished"
-          date
           echo "========================================"
+
+          date
 
 
       # ============================================================
-      # 23. Verify generated firmware
+      # 23. Verify generated images
       # ============================================================
 
       - name: Verify firmware
-
         working-directory: ./immortalwrt
 
         run: |
@@ -927,8 +920,9 @@ jobs:
 
           TARGET_DIR="bin/targets/x86/64"
 
+
           echo "========================================"
-          echo "Generated images"
+          echo "Generated files"
           echo "========================================"
 
           find "$TARGET_DIR" \
@@ -940,47 +934,43 @@ jobs:
 
           # ========================================================
           # Find EFI image
+          #
+          # ImmortalWrt image name can vary between revisions.
+          # Do not hard-code ext4 only.
           # ========================================================
 
-          EFI_IMAGE="$(
-            find "$TARGET_DIR" \
-              -maxdepth 1 \
-              -type f \
-              \( \
-                -name '*combined-efi.img.gz' \
-                -o \
-                -name '*combined-efi.img' \
-              \) \
-              | head -n 1
-          )"
+          EFI_IMAGE="$(find "$TARGET_DIR" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name '*combined-efi.img.gz' \
+              -o \
+              -name '*combined-efi.img' \
+            \) \
+            | head -n 1)"
 
 
           # ========================================================
           # Find VMDK
           # ========================================================
 
-          VMDK_IMAGE="$(
-            find "$TARGET_DIR" \
-              -maxdepth 1 \
-              -type f \
-              -iname '*.vmdk' \
-              | head -n 1
-          )"
+          VMDK_IMAGE="$(find "$TARGET_DIR" \
+            -maxdepth 1 \
+            -type f \
+            -name '*.vmdk' \
+            | head -n 1)"
 
 
           if [ -z "$EFI_IMAGE" ]; then
 
             echo ""
             echo "ERROR: EFI image not found!"
-
             echo ""
-            echo "Available images:"
 
             find "$TARGET_DIR" \
               -maxdepth 1 \
               -type f \
-              -printf '%f\n' \
-              | sort
+              -printf '%f\n'
 
             exit 1
 
@@ -991,15 +981,12 @@ jobs:
 
             echo ""
             echo "ERROR: VMDK image not found!"
-
             echo ""
-            echo "Available images:"
 
             find "$TARGET_DIR" \
               -maxdepth 1 \
               -type f \
-              -printf '%f\n' \
-              | sort
+              -printf '%f\n'
 
             exit 1
 
@@ -1016,7 +1003,7 @@ jobs:
 
           echo ""
           echo "========================================"
-          echo "ESXi VMDK"
+          echo "VMDK image"
           echo "========================================"
 
           echo "$VMDK_IMAGE"
@@ -1037,7 +1024,6 @@ jobs:
       # ============================================================
 
       - name: Prepare artifacts
-
         working-directory: ./immortalwrt
 
         run: |
@@ -1055,39 +1041,46 @@ jobs:
 
 
           # ========================================================
-          # EFI
+          # EFI image
           # ========================================================
 
-          EFI_IMAGE="$(
-            find "$TARGET_DIR" \
-              -maxdepth 1 \
-              -type f \
-              \( \
-                -name '*combined-efi.img.gz' \
-                -o \
-                -name '*combined-efi.img' \
-              \) \
-              | head -n 1
-          )"
+          EFI_IMAGE="$(find "$TARGET_DIR" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name '*combined-efi.img.gz' \
+              -o \
+              -name '*combined-efi.img' \
+            \) \
+            | head -n 1)"
 
-          cp "$EFI_IMAGE" \
-            "artifact/firmware/ImmortalWrt-25.12-x86_64-UEFI-${BUILD_DATE}.img.gz"
+
+          if [[ "$EFI_IMAGE" == *.gz ]]; then
+
+            cp "$EFI_IMAGE" \
+              "artifact/firmware/ImmortalWrt-25.12-x86-64-UEFI-${BUILD_DATE}.img.gz"
+
+          else
+
+            cp "$EFI_IMAGE" \
+              "artifact/firmware/ImmortalWrt-25.12-x86-64-UEFI-${BUILD_DATE}.img"
+
+          fi
 
 
           # ========================================================
           # VMDK
           # ========================================================
 
-          VMDK_IMAGE="$(
-            find "$TARGET_DIR" \
-              -maxdepth 1 \
-              -type f \
-              -iname '*.vmdk' \
-              | head -n 1
-          )"
+          VMDK_IMAGE="$(find "$TARGET_DIR" \
+            -maxdepth 1 \
+            -type f \
+            -name '*.vmdk' \
+            | head -n 1)"
+
 
           cp "$VMDK_IMAGE" \
-            "artifact/firmware/ImmortalWrt-25.12-x86_64-ESXi-${BUILD_DATE}.vmdk"
+            "artifact/firmware/ImmortalWrt-25.12-x86-64-ESXi-${BUILD_DATE}.vmdk"
 
 
           # ========================================================
@@ -1096,22 +1089,28 @@ jobs:
 
           cd artifact/firmware
 
-          sha256sum \
-            * \
+          sha256sum * \
             > SHA256SUMS
 
           cd ../..
 
 
           # ========================================================
-          # APK
+          # APK packages
+          #
+          # ImmortalWrt 25.12 may use APK package format.
+          # Also collect IPK if generated.
           # ========================================================
 
           if [ -d bin/packages ]; then
 
             find bin/packages \
               -type f \
-              -name '*.apk' \
+              \( \
+                -name '*.apk' \
+                -o \
+                -name '*.ipk' \
+              \) \
               -exec cp {} artifact/apk/ \;
 
           fi
@@ -1146,11 +1145,12 @@ jobs:
           # Source information
           # ========================================================
 
-          git log -1 --oneline \
+          git log -1 --format=fuller \
             > artifact/buildinfo/source.commit
 
+
           git describe --always --dirty \
-            >> artifact/buildinfo/source.commit
+            > artifact/buildinfo/source.version
 
 
           # ========================================================
@@ -1167,12 +1167,11 @@ jobs:
 
           echo ""
           echo "========================================"
-          echo "APK packages"
+          echo "Packages"
           echo "========================================"
 
           find artifact/apk \
             -type f \
-            -name '*.apk' \
             -printf '%f\n' \
             | sort \
             || true
@@ -1183,7 +1182,7 @@ jobs:
           echo "Build information"
           echo "========================================"
 
-          ls -lh artifact/buildinfo || true
+          ls -lh artifact/buildinfo
 
 
       # ============================================================
@@ -1191,12 +1190,11 @@ jobs:
       # ============================================================
 
       - name: Upload firmware
-
         uses: actions/upload-artifact@v4
 
         with:
 
-          name: ImmortalWrt-25.12-x86_64-Firmware-${{ env.BUILD_DATE }}
+          name: ImmortalWrt-25.12-x86-64-Firmware-${{ env.BUILD_DATE }}
 
           path: |
             ./immortalwrt/artifact/firmware/*
@@ -1207,19 +1205,18 @@ jobs:
 
 
       # ============================================================
-      # 26. Upload APK
+      # 26. Upload APK / IPK
       # ============================================================
 
-      - name: Upload APK packages
-
+      - name: Upload packages
         uses: actions/upload-artifact@v4
 
         with:
 
-          name: ImmortalWrt-25.12-x86_64-APK-${{ env.BUILD_DATE }}
+          name: ImmortalWrt-25.12-x86-64-Packages-${{ env.BUILD_DATE }}
 
           path: |
-            ./immortalwrt/artifact/apk/*.apk
+            ./immortalwrt/artifact/apk/*
 
           if-no-files-found: warn
 
@@ -1231,16 +1228,15 @@ jobs:
       # ============================================================
 
       - name: Upload build information
-
         uses: actions/upload-artifact@v4
 
         with:
 
-          name: ImmortalWrt-25.12-x86_64-BuildInfo-${{ env.BUILD_DATE }}
+          name: ImmortalWrt-25.12-x86-64-BuildInfo-${{ env.BUILD_DATE }}
 
           path: |
             ./immortalwrt/artifact/buildinfo/*
 
-          if-no-files-found: warn
+          if-no-files-found: error
 
           retention-days: 30
