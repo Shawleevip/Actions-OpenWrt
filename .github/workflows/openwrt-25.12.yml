@@ -382,7 +382,7 @@ jobs:
 
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
-          CONFIG_TARGET_x86_64_Generic=y
+          CONFIG_TARGET_x86_64_DEVICE_generic=y
 
 
           # ======================================================
@@ -722,7 +722,7 @@ jobs:
           REQUIRED="
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
-          CONFIG_TARGET_x86_64_Generic=y
+          CONFIG_TARGET_x86_64_DEVICE_generic=y
 
           CONFIG_EFI_IMAGES=y
 
