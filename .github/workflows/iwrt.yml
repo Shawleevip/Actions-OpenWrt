@@ -113,6 +113,31 @@ jobs:
           src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;master
           EOF
 
+
+      # ==========================================================
+      # 9. Update and install feeds (Explicit Order)
+      # ==========================================================
+      - name: Update and install feeds
+        working-directory: ./immortalwrt
+        run: |
+          echo "Updating base feeds..."
+          ./scripts/feeds update packages
+          ./scripts/feeds update luci
+          
+          echo "Updating PassWall feeds..."
+          ./scripts/feeds update passwall
+          ./scripts/feeds update passwall_packages
+          ./scripts/feeds update passwall2
+          
+          echo "Installing PassWall packages..."
+          ./scripts/feeds install -p passwall_packages -a
+          ./scripts/feeds install -p passwall -a
+          ./scripts/feeds install -p passwall2 -a
+          
+          echo "Checking directory structure..."
+          ls -l feeds/passwall2 || echo "WARNING: passwall2 dir missing!"
+          ls -l feeds/passwall_packages || echo "WARNING: passwall_packages dir missing!"
+          
       # ==========================================================
       # 9. 更新并安装 Feeds
       # ==========================================================
