@@ -323,26 +323,46 @@ jobs:
           git clone \
             --depth 1 \
             --single-branch \
-            --branch master \
             https://github.com/sirpdboy/luci-app-lucky.git \
             package/lucky
 
           echo ""
           echo "========================================"
-          echo "Lucky repository"
+          echo "Lucky repository information"
           echo "========================================"
 
           cd package/lucky
 
+          echo "Commit:"
           git log -1 --oneline
 
           echo ""
-          echo "Makefile:"
+          echo "Branch:"
+          git branch --show-current || true
+
+          echo ""
+          echo "Files:"
+          ls -la
+
+          echo ""
+          echo "Checking Makefile..."
+
           test -f Makefile
 
           echo ""
-          echo "Lucky package installed successfully."
+          echo "Checking package definition..."
 
+          grep -Rqs \
+            "Package/luci-app-lucky" \
+            . || {
+              echo "[ERROR] luci-app-lucky package definition not found!"
+              exit 1
+            }
+
+          echo ""
+          echo "========================================"
+          echo "Lucky package installed successfully."
+          echo "========================================"
 
       # ============================================================
       # 12. Add RTP2HTTPD
