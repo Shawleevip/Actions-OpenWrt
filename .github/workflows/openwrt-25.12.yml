@@ -27,7 +27,7 @@ jobs:
 
 
       # ==========================================================
-      # 2. Free disk space
+      # 2. Maximize build space
       # ==========================================================
 
       - name: Maximize build space
@@ -36,11 +36,11 @@ jobs:
           root-reserve-mb: 4096
           temp-reserve-mb: 1024
           swap-size-mb: 8192
-          remove-dotnet: true
-          remove-android: true
-          remove-haskell: true
-          remove-codeql: true
-          remove-docker-images: true
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
 
 
       # ==========================================================
@@ -50,6 +50,7 @@ jobs:
       - name: Install dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
+
         run: |
           sudo rm -rf \
             /usr/share/dotnet \
@@ -106,7 +107,9 @@ jobs:
             libssl-dev \
             libtool \
             llvm \
+            lrzsz \
             ninja-build \
+            p7zip \
             p7zip-full \
             patch \
             pkgconf \
@@ -122,6 +125,7 @@ jobs:
             texinfo \
             uglifyjs \
             unzip \
+            vim \
             wget \
             xmlto \
             xxd \
@@ -143,23 +147,23 @@ jobs:
 
 
       # ==========================================================
-      # 5. ccache
+      # 5. CCache
       # ==========================================================
 
       - name: Restore ccache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: openwrt-25.12-x86_64-ccache-${{ hashFiles('.github/workflows/openwrt-25.12.yml') }}
+          key: openwrt-25.12-x86_64-${{ runner.os }}-ccache-${{ hashFiles('.github/workflows/openwrt-25.12.yml') }}
           restore-keys: |
-            openwrt-25.12-x86_64-ccache-
+            openwrt-25.12-x86_64-${{ runner.os }}-ccache-
 
 
       # ==========================================================
       # 6. Clone official OpenWrt
       # ==========================================================
 
-      - name: Clone OpenWrt
+      - name: Clone official OpenWrt
         run: |
           git clone \
             --depth 1 \
@@ -169,10 +173,7 @@ jobs:
 
           cd "$OPENWRT_DIR"
 
-          echo "========================================"
-          echo "OpenWrt source"
-          echo "========================================"
-
+          echo "OpenWrt source:"
           git log -1 --oneline
           git describe --always --dirty
 
@@ -185,13 +186,30 @@ jobs:
         uses: actions/cache@v4
         with:
           path: openwrt/dl
-          key: openwrt-25.12-x86_64-dl-${{ hashFiles('.github/workflows/openwrt-25.12.yml') }}
+          key: openwrt-25.12-x86_64-${{ runner.os }}-dl-${{ hashFiles('.github/workflows/openwrt-25.12.yml') }}
           restore-keys: |
-            openwrt-25.12-x86_64-dl-
+            openwrt-25.12-x86_64-${{ runner.os }}-dl-
 
 
       # ==========================================================
-      # 8. Official feeds
+      # 8. Third-party feeds
+      # ==========================================================
+
+      - name: Configure third-party feeds
+        working-directory: ./openwrt
+        run: |
+          cat >> feeds.conf.default <<'EOF'
+
+          src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git;main
+          src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main
+          src-git passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main
+          src-git sbwml https://github.com/sbwml/openwrt_pkgs.git;main
+
+          EOF
+
+
+      # ==========================================================
+      # 9. Update feeds
       # ==========================================================
 
       - name: Update feeds
@@ -202,7 +220,7 @@ jobs:
 
 
       # ==========================================================
-      # 9. Third-party packages
+      # 10. Add third-party packages
       # ==========================================================
 
       - name: Add third-party packages
@@ -213,33 +231,13 @@ jobs:
           rm -rf package/luci-app-openclash
           git clone --depth 1 \
             https://github.com/vernesong/OpenClash.git \
-            /tmp/openclash
-
-          cp -a \
-            /tmp/openclash/luci-app-openclash \
             package/luci-app-openclash
-
-
-          # PassWall2
-          rm -rf package/passwall2
-          git clone --depth 1 \
-            https://github.com/Openwrt-Passwall/openwrt-passwall2.git \
-            package/passwall2
-
 
           # Lucky
           rm -rf package/lucky
           git clone --depth 1 \
             https://github.com/sirpdboy/luci-app-lucky.git \
             package/lucky
-
-
-          # RTP2HTTPD
-          rm -rf package/rtp2httpd
-          git clone --depth 1 \
-            https://github.com/stackia/rtp2httpd.git \
-            package/rtp2httpd
-
 
           # Argon
           rm -rf \
@@ -254,46 +252,24 @@ jobs:
             https://github.com/jerrykuku/luci-app-argon-config.git \
             package/luci-app-argon-config
 
-
           # Diskman
           rm -rf package/diskman
           git clone --depth 1 \
             https://github.com/lisaac/luci-app-diskman.git \
             package/diskman
 
-
-          # Vlmcsd
-          rm -rf package/vlmcsd
-
-          git clone \
-            --filter=blob:none \
-            --no-checkout \
-            --depth 1 \
-            https://github.com/sbwml/openwrt_pkgs.git \
-            package/vlmcsd
-
-          cd package/vlmcsd
-
-          git sparse-checkout init --cone
-
-          git sparse-checkout set \
-            vlmcsd \
-            luci-app-vlmcsd
-
-          git checkout
-
-          cd ../..
-
           make package/symlinks
 
 
       # ==========================================================
-      # 10. Configuration
+      # 11. Generate configuration
       # ==========================================================
 
       - name: Generate configuration
         working-directory: ./openwrt
         run: |
+
+          rm -f .config
 
           cat > .config <<'EOF'
 
@@ -303,17 +279,20 @@ jobs:
 
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
+          CONFIG_TARGET_x86_64_Generic=y
+
+
+          # ======================================================
+          # Firmware
+          # ======================================================
 
           CONFIG_TARGET_KERNEL_PARTSIZE=128
           CONFIG_TARGET_ROOTFS_PARTSIZE=640
 
-
-          # ======================================================
-          # Images
-          # ======================================================
-
           CONFIG_TARGET_IMAGES_GZIP=y
           CONFIG_EFI_IMAGES=y
+
+          # ESXi / VMDK
           CONFIG_VMDK_IMAGES=y
 
 
@@ -323,8 +302,9 @@ jobs:
 
           CONFIG_PACKAGE_luci=y
           CONFIG_PACKAGE_luci-ssl=y
+          CONFIG_PACKAGE_luci-app-package-manager=y
 
-          # Simplified Chinese
+          # Base Chinese
           CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
 
 
@@ -403,16 +383,8 @@ jobs:
           # ======================================================
 
           CONFIG_PACKAGE_luci-app-openclash=y
-
-          CONFIG_PACKAGE_bash=y
-          CONFIG_PACKAGE_curl=y
-          CONFIG_PACKAGE_ca-bundle=y
-          CONFIG_PACKAGE_ip-full=y
-          CONFIG_PACKAGE_ruby=y
-          CONFIG_PACKAGE_ruby-yaml=y
-          CONFIG_PACKAGE_kmod-tun=y
-          CONFIG_PACKAGE_unzip=y
-          CONFIG_PACKAGE_coreutils-nohup=y
+          CONFIG_PACKAGE_kmod-nft-tproxy=y
+          CONFIG_PACKAGE_kmod-nft-socket=y
 
 
           # ======================================================
@@ -420,10 +392,7 @@ jobs:
           # ======================================================
 
           CONFIG_PACKAGE_luci-app-passwall2=y
-          CONFIG_PACKAGE_xray-core=y
           CONFIG_PACKAGE_sing-box=y
-          CONFIG_PACKAGE_kmod-nft-tproxy=y
-          CONFIG_PACKAGE_kmod-nft-socket=y
 
 
           # ======================================================
@@ -437,11 +406,12 @@ jobs:
           # RTP2HTTPD
           # ======================================================
 
+          CONFIG_PACKAGE_rtp2httpd=y
           CONFIG_PACKAGE_luci-app-rtp2httpd=y
 
 
           # ======================================================
-          # Vlmcsd
+          # Vlmcsd / KMS
           # ======================================================
 
           CONFIG_PACKAGE_vlmcsd=y
@@ -464,30 +434,11 @@ jobs:
 
 
           # ======================================================
-          # Common tools
+          # UPnP / IGD / NAT-PMP / PCP
           # ======================================================
 
-          CONFIG_PACKAGE_htop=y
-          CONFIG_PACKAGE_nano=y
-          CONFIG_PACKAGE_screen=y
-          CONFIG_PACKAGE_tree=y
-          CONFIG_PACKAGE_wget=y
-          CONFIG_PACKAGE_acme=y
-          CONFIG_PACKAGE_acme-dnsapi=y
-          CONFIG_PACKAGE_haproxy=y
-          CONFIG_PACKAGE_socat=y
-          CONFIG_PACKAGE_iperf3=y
-          CONFIG_PACKAGE_iftop=y
-          CONFIG_PACKAGE_tcpdump=y
-          CONFIG_PACKAGE_pv=y
-          CONFIG_PACKAGE_bind-host=y
-
-
-          # ======================================================
-          # ESXi
-          # ======================================================
-
-          CONFIG_PACKAGE_open-vm-tools=y
+          CONFIG_PACKAGE_miniupnpd-nftables=y
+          CONFIG_PACKAGE_luci-app-upnp=y
 
 
           # ======================================================
@@ -499,10 +450,44 @@ jobs:
 
 
           # ======================================================
-          # LuCI terminal
+          # TTYD
           # ======================================================
 
           CONFIG_PACKAGE_luci-app-ttyd=y
+
+
+          # ======================================================
+          # Network tools
+          # ======================================================
+
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_ca-bundle=y
+          CONFIG_PACKAGE_wget-ssl=y
+
+          CONFIG_PACKAGE_htop=y
+          CONFIG_PACKAGE_nano=y
+          CONFIG_PACKAGE_screen=y
+          CONFIG_PACKAGE_tree=y
+          CONFIG_PACKAGE_wget=y
+
+          CONFIG_PACKAGE_acme=y
+          CONFIG_PACKAGE_acme-dnsapi=y
+
+          CONFIG_PACKAGE_haproxy=y
+          CONFIG_PACKAGE_socat=y
+
+          CONFIG_PACKAGE_iperf3=y
+          CONFIG_PACKAGE_iftop=y
+          CONFIG_PACKAGE_tcpdump=y
+          CONFIG_PACKAGE_pv=y
+          CONFIG_PACKAGE_bind-host=y
+
+
+          # ======================================================
+          # ESXi tools
+          # ======================================================
+
+          CONFIG_PACKAGE_open-vm-tools=y
 
 
           # ======================================================
@@ -520,28 +505,171 @@ jobs:
 
           EOF
 
+
+          # ------------------------------------------------------
+          # Optional Chinese localization packages
+          #
+          # Only add a localization package when the current
+          # package trees actually provide it. This prevents a
+          # missing third-party i18n package from killing a build.
+          # ------------------------------------------------------
+
+          has_package() {
+            PKG="$1"
+            grep -Rqs \
+              --include='Makefile' \
+              "^Package/${PKG}" \
+              package \
+              feeds \
+              2>/dev/null
+          }
+
+          for PKG in \
+            luci-i18n-package-manager-zh-cn \
+            luci-i18n-firewall-zh-cn \
+            luci-i18n-openvpn-zh-cn \
+            luci-i18n-wireguard-zh-cn \
+            luci-i18n-sqm-zh-cn \
+            luci-i18n-upnp-zh-cn \
+            luci-i18n-irqbalance-zh-cn \
+            luci-i18n-ttyd-zh-cn \
+            luci-i18n-passwall2-zh-cn \
+            luci-i18n-lucky-zh-cn \
+            luci-i18n-rtp2httpd-zh-cn \
+            luci-i18n-vlmcsd-zh-cn \
+            luci-i18n-argon-config-zh-cn \
+            luci-i18n-diskman-zh-cn
+          do
+            if has_package "$PKG"; then
+              echo "CONFIG_PACKAGE_${PKG}=y" >> .config
+              echo "[ OK ] ${PKG}"
+            else
+              echo "[SKIP] ${PKG} not provided by current feeds"
+            fi
+          done
+
+
+          # ------------------------------------------------------
+          # Resolve dependencies
+          # ------------------------------------------------------
+
           make defconfig
 
 
+          echo ""
+          echo "Selected packages:"
+          grep -E \
+            '^CONFIG_PACKAGE_(luci-app-openclash|luci-app-passwall2|luci-i18n-passwall2-zh-cn|luci-app-lucky|luci-i18n-lucky-zh-cn|luci-app-rtp2httpd|luci-i18n-rtp2httpd-zh-cn|vlmcsd|luci-app-vlmcsd|luci-i18n-vlmcsd-zh-cn|luci-app-sqm|luci-i18n-sqm-zh-cn|luci-app-openvpn|luci-i18n-openvpn-zh-cn|wireguard-tools|luci-i18n-wireguard-zh-cn|luci-theme-argon|luci-app-argon-config|luci-i18n-argon-config-zh-cn|luci-app-diskman|luci-i18n-diskman-zh-cn|miniupnpd-nftables|luci-app-upnp|luci-i18n-upnp-zh-cn|luci-i18n-base-zh-cn)' \
+            .config || true
+
+
       # ==========================================================
-      # 11. Download
+      # 12. First-boot test mode
+      #
+      # 25.12 is prepared as a secondary ESXi test router:
+      #
+      # LAN IP : 192.168.1.211
+      # Gateway: 192.168.1.1
+      # DNS    : 192.168.1.1
+      # DHCP   : OFF
+      #
+      # This avoids conflict with the existing LEDE 192.168.1.1.
+      # ==========================================================
+
+      - name: Configure first-boot test network
+        working-directory: ./openwrt
+        run: |
+
+          mkdir -p files/etc/uci-defaults
+
+          cat > files/etc/uci-defaults/99-25-12-test-network <<'EOF'
+          #!/bin/sh
+
+          uci set network.lan.proto='static'
+          uci set network.lan.ipaddr='192.168.1.211'
+          uci set network.lan.netmask='255.255.255.0'
+          uci set network.lan.gateway='192.168.1.1'
+
+          uci -q delete network.lan.dns
+          uci add_list network.lan.dns='192.168.1.1'
+
+          uci set dhcp.lan.ignore='1'
+
+          uci commit network
+          uci commit dhcp
+
+          rm -f "$0"
+
+          exit 0
+          EOF
+
+          chmod +x \
+            files/etc/uci-defaults/99-25-12-test-network
+
+
+      # ==========================================================
+      # 13. Remove invalid third-party runtime APK feeds
+      #
+      # Build-time feeds remain available.
+      # Only the incorrect runtime distfeeds entries are removed.
+      # ==========================================================
+
+      - name: Add runtime APK feed cleanup
+        working-directory: ./openwrt
+        run: |
+
+          mkdir -p files/etc/uci-defaults
+
+          cat > files/etc/uci-defaults/99-25-12-clean-apk-feeds <<'EOF'
+          #!/bin/sh
+
+          FEEDS="/etc/apk/repositories.d/distfeeds.list"
+
+          if [ -f "$FEEDS" ]; then
+            sed -i -E \
+              '/\/packages\/x86_64\/(passwall|passwall2|passwall_packages|sbwml)\/packages\.adb$/d' \
+              "$FEEDS"
+          fi
+
+          rm -f "$0"
+
+          exit 0
+          EOF
+
+          chmod +x \
+            files/etc/uci-defaults/99-25-12-clean-apk-feeds
+
+
+      # ==========================================================
+      # 14. Prerequisites
+      # ==========================================================
+
+      - name: Check prerequisites
+        working-directory: ./openwrt
+        run: |
+          make prereq
+
+
+      # ==========================================================
+      # 15. Download
       # ==========================================================
 
       - name: Download sources
         working-directory: ./openwrt
         run: |
-          make download -j8
+          make download -j8 V=s
 
 
       # ==========================================================
-      # 12. Compile
+      # 16. Compile
       # ==========================================================
 
       - name: Compile firmware
         working-directory: ./openwrt
         run: |
+
           echo "========================================"
-          echo "OpenWrt build started"
+          echo "OpenWrt 25.12 build started"
           echo "$BUILD_TIME"
           echo "========================================"
 
@@ -549,58 +677,105 @@ jobs:
           make -j1 V=s
 
           echo "========================================"
-          echo "OpenWrt build finished"
+          echo "OpenWrt 25.12 build finished"
           echo "========================================"
 
           date
 
 
       # ==========================================================
-      # 13. Prepare firmware + BuildInfo
+      # 17. Verify generated images
       # ==========================================================
 
-      - name: Prepare artifacts
+      - name: Verify firmware
         working-directory: ./openwrt
         run: |
 
+          set -e
+
           TARGET="bin/targets/x86/64"
 
-          rm -rf artifact
-          mkdir -p \
-            artifact/firmware \
-            artifact/buildinfo
+          echo "Generated firmware:"
+          find "$TARGET" \
+            -maxdepth 1 \
+            -type f \
+            -printf '%f\n' \
+            | sort
 
 
-          # EFI
-          EFI="$(find "$TARGET" -maxdepth 1 -type f \
-            \( \
-              -name '*combined-efi.img.gz' \
-              -o \
-              -name '*combined-efi.img' \
-            \) | head -n 1)"
+          EFI="$(find "$TARGET" \
+            -maxdepth 1 \
+            -type f \
+            -name '*generic-squashfs-combined-efi.img.gz' \
+            | head -n 1)"
 
-          test -n "$EFI"
-
-          case "$EFI" in
-            *.gz)
-              cp "$EFI" \
-                "artifact/firmware/OpenWrt-25.12-x86-64-UEFI-${BUILD_DATE}.img.gz"
-              ;;
-            *)
-              cp "$EFI" \
-                "artifact/firmware/OpenWrt-25.12-x86-64-UEFI-${BUILD_DATE}.img"
-              ;;
-          esac
-
-
-          # VMDK
           VMDK="$(find "$TARGET" \
             -maxdepth 1 \
             -type f \
             -name '*.vmdk' \
             | head -n 1)"
 
-          test -n "$VMDK"
+
+          if [ -z "$EFI" ]; then
+            echo ""
+            echo "ERROR: EFI image not found."
+            exit 1
+          fi
+
+          if [ -z "$VMDK" ]; then
+            echo ""
+            echo "ERROR: VMDK image not found."
+            exit 1
+          fi
+
+
+          echo ""
+          echo "EFI:"
+          echo "$EFI"
+          ls -lh "$EFI"
+
+          echo ""
+          echo "VMDK:"
+          echo "$VMDK"
+          ls -lh "$VMDK"
+
+
+      # ==========================================================
+      # 18. Prepare artifacts
+      # ==========================================================
+
+      - name: Prepare artifacts
+        working-directory: ./openwrt
+        run: |
+
+          set -e
+
+          TARGET="bin/targets/x86/64"
+
+          rm -rf artifact
+
+          mkdir -p \
+            artifact/firmware \
+            artifact/buildinfo
+
+
+          # EFI
+          EFI="$(find "$TARGET" \
+            -maxdepth 1 \
+            -type f \
+            -name '*generic-squashfs-combined-efi.img.gz' \
+            | head -n 1)"
+
+          cp "$EFI" \
+            "artifact/firmware/OpenWrt-25.12-x86-64-UEFI-${BUILD_DATE}.img.gz"
+
+
+          # ESXi VMDK
+          VMDK="$(find "$TARGET" \
+            -maxdepth 1 \
+            -type f \
+            -name '*.vmdk' \
+            | head -n 1)"
 
           cp "$VMDK" \
             "artifact/firmware/OpenWrt-25.12-x86-64-ESXi-${BUILD_DATE}.vmdk"
@@ -608,11 +783,13 @@ jobs:
 
           # SHA256
           cd artifact/firmware
+
           sha256sum * > SHA256SUMS
+
           cd ../..
 
 
-          # BuildInfo
+          # Build information
           cp .config \
             artifact/buildinfo/config.final
 
@@ -621,6 +798,7 @@ jobs:
 
           git describe --always --dirty \
             > artifact/buildinfo/source.version
+
 
           find "$TARGET" \
             -maxdepth 1 \
@@ -633,6 +811,7 @@ jobs:
               -name '*.bom.cdx.json' \
             \) \
             -exec cp {} artifact/buildinfo/ \;
+
 
           echo ""
           echo "========================================"
@@ -650,7 +829,7 @@ jobs:
 
 
       # ==========================================================
-      # 14. Upload firmware
+      # 19. Upload firmware
       # ==========================================================
 
       - name: Upload firmware
@@ -663,7 +842,7 @@ jobs:
 
 
       # ==========================================================
-      # 15. Upload BuildInfo
+      # 20. Upload BuildInfo
       # ==========================================================
 
       - name: Upload BuildInfo
