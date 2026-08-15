@@ -397,7 +397,7 @@ jobs:
           CONFIG_TARGET_ROOTFS_PARTSIZE=640
 
           CONFIG_TARGET_IMAGES_GZIP=y
-          CONFIG_EFI_IMAGES=y
+          CONFIG_GRUB_EFI_IMAGES
 
 
           # ======================================================
@@ -703,7 +703,7 @@ jobs:
           echo "========================================"
 
           grep -E \
-            '^CONFIG_(TARGET_x86|TARGET_KERNEL_PARTSIZE|TARGET_ROOTFS_PARTSIZE|TARGET_IMAGES_GZIP|EFI_IMAGES|VMDK_IMAGES)' \
+            '^CONFIG_(TARGET_x86|TARGET_KERNEL_PARTSIZE|TARGET_ROOTFS_PARTSIZE|TARGET_IMAGES_GZIP|GRUB_EFI_IMAGES|VMDK_IMAGES)' \
             .config \
             || true
 
@@ -724,7 +724,7 @@ jobs:
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_DEVICE_generic=y
 
-          CONFIG_EFI_IMAGES=y
+          CONFIG_GRUB_EFI_IMAGES=y
 
           CONFIG_PACKAGE_luci=y
           CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
