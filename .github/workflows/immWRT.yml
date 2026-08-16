@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - master
-  schedule:
-    - cron: "0 10,18 * * *"
+ 
+  workflow_dispatch:
+
   release:
     types: [published]
 
