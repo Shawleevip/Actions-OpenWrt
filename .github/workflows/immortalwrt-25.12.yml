@@ -36,7 +36,6 @@ jobs:
           root-reserve-mb: 4096
           temp-reserve-mb: 1024
           swap-size-mb: 8192
-
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
@@ -51,7 +50,6 @@ jobs:
       - name: Install dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
-
         run: |
           sudo rm -rf \
             /usr/share/dotnet \
@@ -67,72 +65,25 @@ jobs:
           sudo apt-get update
 
           sudo apt-get install -y \
-            ack \
-            asciidoc \
-            autoconf \
-            automake \
-            autopoint \
-            binutils \
-            bison \
-            build-essential \
-            bzip2 \
-            ccache \
-            clang \
-            cmake \
-            cpio \
-            curl \
-            device-tree-compiler \
-            flex \
-            gawk \
-            gcc-multilib \
-            g++-multilib \
-            gettext \
-            genisoimage \
-            git \
-            gperf \
-            haveged \
-            help2man \
-            intltool \
-            libc6-dev-i386 \
-            libelf-dev \
-            libfuse-dev \
-            libglib2.0-dev \
-            libgmp3-dev \
-            libltdl-dev \
-            libmpc-dev \
-            libmpfr-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libpython3-dev \
-            libreadline-dev \
-            libssl-dev \
-            libtool \
-            llvm \
-            lrzsz \
-            ninja-build \
-            p7zip \
-            p7zip-full \
-            patch \
-            pkgconf \
-            python3 \
-            python3-pyelftools \
-            python3-setuptools \
-            qemu-utils \
-            rsync \
-            scons \
-            squashfs-tools \
-            subversion \
-            swig \
-            texinfo \
-            uglifyjs \
-            unzip \
-            vim \
-            wget \
-            xmlto \
-            xxd \
-            zlib1g-dev \
-            scdoc \
-            zstd
+            ack asciidoc autoconf automake autopoint \
+            binutils bison build-essential bzip2 ccache \
+            clang cmake cpio curl \
+            device-tree-compiler flex gawk \
+            gcc-multilib g++-multilib gettext \
+            genisoimage git gperf haveged help2man \
+            intltool libc6-dev-i386 \
+            libclang-dev libelf-dev libfuse-dev \
+            libglib2.0-dev libgmp3-dev libltdl-dev \
+            libmpc-dev libmpfr-dev libncurses5-dev \
+            libncursesw5-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool \
+            libbpf-dev llvm lrzsz ninja-build \
+            p7zip p7zip-full patch pkgconf \
+            python3 python3-pyelftools python3-setuptools \
+            qemu-utils rsync scons squashfs-tools \
+            subversion swig texinfo uglifyjs unzip \
+            vim wget xmlto xxd zlib1g-dev \
+            scdoc zstd
 
           sudo timedatectl set-timezone Asia/Shanghai
 
@@ -148,7 +99,7 @@ jobs:
 
 
       # ==========================================================
-      # 5. CCache
+      # 5. Restore ccache
       # ==========================================================
 
       - name: Restore ccache
@@ -161,7 +112,7 @@ jobs:
 
 
       # ==========================================================
-      # 6. Clone fixed ImmortalWrt release
+      # 6. Clone ImmortalWrt
       # ==========================================================
 
       - name: Clone ImmortalWrt
@@ -177,7 +128,6 @@ jobs:
           echo "========================================"
           echo "ImmortalWrt source"
           echo "========================================"
-
           git log -1 --oneline
           git describe --always --dirty
 
@@ -187,7 +137,7 @@ jobs:
 
 
       # ==========================================================
-      # 7. Download cache
+      # 7. Restore download cache
       # ==========================================================
 
       - name: Restore download cache
@@ -200,25 +150,21 @@ jobs:
 
 
       # ==========================================================
-      # 8. Configure PassWall feeds
-      #
-      # Build-time only.
+      # 8. Configure third-party feeds
       # ==========================================================
 
-      - name: Configure PassWall feeds
+      - name: Configure third-party feeds
         working-directory: ./immortalwrt
         run: |
           cat >> feeds.conf.default <<'EOF'
-
           src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git;main
           src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main
           src-git passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main
-
           EOF
 
 
       # ==========================================================
-      # 9. Update and install feeds
+      # 9. Update feeds
       # ==========================================================
 
       - name: Update feeds
@@ -229,11 +175,7 @@ jobs:
 
 
       # ==========================================================
-      # 10. Freeze third-party feed definitions
-      #
-      # Packages have already been installed into package/feeds.
-      # Keep the source packages, but stop advertising these feeds
-      # as runtime repositories.
+      # 10. Freeze third-party feeds
       # ==========================================================
 
       - name: Freeze third-party feeds
@@ -247,34 +189,31 @@ jobs:
 
 
       # ==========================================================
-      # 11. OpenClash
+      # 11. Add OpenClash
       # ==========================================================
 
       - name: Add OpenClash
         working-directory: ./immortalwrt
         run: |
-          rm -rf /tmp/openclash
-          rm -rf package/luci-app-openclash
+          rm -rf /tmp/openclash package/luci-app-openclash
 
           git clone \
             --depth 1 \
             https://github.com/vernesong/OpenClash.git \
             /tmp/openclash
 
-          cp -a \
-            /tmp/openclash/luci-app-openclash \
+          cp -a /tmp/openclash/luci-app-openclash \
             package/luci-app-openclash
 
 
       # ==========================================================
-      # 12. Lucky
+      # 12. Add Lucky
       # ==========================================================
 
       - name: Add Lucky
         working-directory: ./immortalwrt
         run: |
-          rm -rf /tmp/lucky
-          rm -rf \
+          rm -rf /tmp/lucky \
             package/lucky \
             package/luci-app-lucky
 
@@ -283,17 +222,12 @@ jobs:
             https://github.com/sirpdboy/luci-app-lucky.git \
             /tmp/lucky
 
-          cp -a \
-            /tmp/lucky/lucky \
-            package/lucky
-
-          cp -a \
-            /tmp/lucky/luci-app-lucky \
-            package/luci-app-lucky
+          cp -a /tmp/lucky/lucky package/lucky
+          cp -a /tmp/lucky/luci-app-lucky package/luci-app-lucky
 
 
       # ==========================================================
-      # 13. RTP2HTTPD
+      # 13. Add RTP2HTTPD
       # ==========================================================
 
       - name: Add RTP2HTTPD
@@ -308,14 +242,13 @@ jobs:
 
 
       # ==========================================================
-      # 14. Vlmcsd / KMS
+      # 14. Add Vlmcsd / KMS
       # ==========================================================
 
       - name: Add Vlmcsd
         working-directory: ./immortalwrt
         run: |
-          rm -rf /tmp/sbwml
-          rm -rf \
+          rm -rf /tmp/sbwml \
             package/vlmcsd \
             package/luci-app-vlmcsd
 
@@ -329,7 +262,6 @@ jobs:
           cd /tmp/sbwml
 
           git sparse-checkout init --cone
-
           git sparse-checkout set \
             vlmcsd \
             luci-app-vlmcsd
@@ -338,17 +270,12 @@ jobs:
 
           cd -
 
-          cp -a \
-            /tmp/sbwml/vlmcsd \
-            package/vlmcsd
-
-          cp -a \
-            /tmp/sbwml/luci-app-vlmcsd \
-            package/luci-app-vlmcsd
+          cp -a /tmp/sbwml/vlmcsd package/vlmcsd
+          cp -a /tmp/sbwml/luci-app-vlmcsd package/luci-app-vlmcsd
 
 
       # ==========================================================
-      # 15. Argon
+      # 15. Add Argon
       # ==========================================================
 
       - name: Add Argon
@@ -370,7 +297,7 @@ jobs:
 
 
       # ==========================================================
-      # 16. Diskman
+      # 16. Add Diskman
       # ==========================================================
 
       - name: Add Diskman
@@ -401,7 +328,6 @@ jobs:
       - name: Generate configuration
         working-directory: ./immortalwrt
         run: |
-
           rm -f .config
 
           cat > .config <<'EOF'
@@ -414,18 +340,57 @@ jobs:
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_DEVICE_generic=y
 
-
-          # ======================================================
-          # Firmware
-          #
-          # EFI only.
-          # VMDK deliberately disabled.
-          # ======================================================
-
           CONFIG_TARGET_KERNEL_PARTSIZE=128
           CONFIG_TARGET_ROOTFS_PARTSIZE=640
           CONFIG_TARGET_IMAGES_GZIP=y
           CONFIG_GRUB_EFI_IMAGES=y
+
+
+          # ======================================================
+          # Build / CCache
+          # ======================================================
+
+          CONFIG_CCACHE=y
+
+
+          # ======================================================
+          # BPF / BTF / XDP
+          #
+          # Required by Daed
+          # ======================================================
+
+          CONFIG_BPF_TOOLCHAIN=y
+          CONFIG_BPF_TOOLCHAIN_HOST=y
+
+          CONFIG_KERNEL_BPF_EVENTS=y
+          CONFIG_KERNEL_CGROUP_BPF=y
+
+          CONFIG_KERNEL_DEBUG_INFO=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
+
+          # BTF requires full debug information
+          # CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
+
+          CONFIG_KERNEL_XDP_SOCKETS=y
+
+
+          # ======================================================
+          # Daed
+          # ======================================================
+
+          CONFIG_PACKAGE_daed=y
+          CONFIG_PACKAGE_daed-geoip=y
+          CONFIG_PACKAGE_daed-geosite=y
+
+          CONFIG_PACKAGE_luci-app-daed=y
+          CONFIG_PACKAGE_luci-i18n-daed-zh-cn=y
+
+          CONFIG_PACKAGE_kmod-sched-core=y
+          CONFIG_PACKAGE_kmod-sched-bpf=y
+          CONFIG_PACKAGE_kmod-veth=y
+          CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
+          CONFIG_PACKAGE_kmod-nft-bridge=y
 
 
           # ======================================================
@@ -434,7 +399,6 @@ jobs:
 
           CONFIG_PACKAGE_luci=y
           CONFIG_PACKAGE_luci-ssl=y
-
           CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
           CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
 
@@ -533,10 +497,8 @@ jobs:
 
           CONFIG_PACKAGE_luci-app-passwall2=y
           CONFIG_PACKAGE_luci-i18n-passwall2-zh-cn=y
-
           CONFIG_PACKAGE_xray-core=y
           CONFIG_PACKAGE_sing-box=y
-
           CONFIG_PACKAGE_kmod-nft-tproxy=y
           CONFIG_PACKAGE_kmod-nft-socket=y
 
@@ -609,12 +571,10 @@ jobs:
 
           CONFIG_PACKAGE_curl=y
           CONFIG_PACKAGE_ca-bundle=y
-
           CONFIG_PACKAGE_htop=y
           CONFIG_PACKAGE_nano=y
           CONFIG_PACKAGE_screen=y
           CONFIG_PACKAGE_tree=y
-
           CONFIG_PACKAGE_acme=y
           CONFIG_PACKAGE_acme-dnsapi=y
           CONFIG_PACKAGE_haproxy=y
@@ -639,20 +599,52 @@ jobs:
 
           CONFIG_PACKAGE_firewall4=y
 
-
-          # ======================================================
-          # CCache
-          # ======================================================
-
-          CONFIG_CCACHE=y
-
           EOF
 
           make defconfig
 
 
       # ==========================================================
-      # 19. Check prerequisites
+      # 19. Verify Daed prerequisites
+      # ==========================================================
+
+      - name: Verify Daed prerequisites
+        working-directory: ./immortalwrt
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "Daed build prerequisites"
+          echo "========================================"
+
+          grep -E \
+            'CONFIG_(BPF_TOOLCHAIN|BPF_TOOLCHAIN_HOST|KERNEL_BPF_EVENTS|KERNEL_CGROUP_BPF|KERNEL_DEBUG_INFO_BTF|KERNEL_XDP_SOCKETS)|CONFIG_PACKAGE_(daed|luci-app-daed|kmod-sched-bpf|kmod-veth|kmod-xdp-sockets-diag)' \
+            .config || true
+
+          echo ""
+          echo "Checking required packages..."
+
+          for pkg in \
+            daed \
+            daed-geoip \
+            daed-geosite \
+            luci-app-daed \
+            kmod-sched-bpf \
+            kmod-veth \
+            kmod-xdp-sockets-diag
+          do
+            grep -q "CONFIG_PACKAGE_${pkg}=y" .config || {
+              echo "ERROR: missing ${pkg}"
+              exit 1
+            }
+          done
+
+          echo ""
+          echo "Daed prerequisites OK."
+
+
+      # ==========================================================
+      # 20. Check prerequisites
       # ==========================================================
 
       - name: Check prerequisites
@@ -662,7 +654,7 @@ jobs:
 
 
       # ==========================================================
-      # 20. Download sources
+      # 21. Download sources
       # ==========================================================
 
       - name: Download sources
@@ -672,7 +664,7 @@ jobs:
 
 
       # ==========================================================
-      # 21. Compile
+      # 22. Compile firmware
       # ==========================================================
 
       - name: Compile firmware
@@ -683,8 +675,7 @@ jobs:
           echo "$BUILD_TIME"
           echo "========================================"
 
-          make -j$(nproc) || \
-          make -j1 V=s
+          make -j$(nproc) || make -j1 V=s
 
           echo "========================================"
           echo "ImmortalWrt 25.12.1 build finished"
@@ -694,17 +685,12 @@ jobs:
 
 
       # ==========================================================
-      # 22. Prepare firmware
-      #
-      # No VMDK.
-      # No APK artifact.
-      # No package repository artifact.
+      # 23. Prepare artifacts
       # ==========================================================
 
       - name: Prepare artifacts
         working-directory: ./immortalwrt
         run: |
-
           set -e
 
           TARGET="bin/targets/x86/64"
@@ -714,7 +700,6 @@ jobs:
           mkdir -p \
             artifact/firmware \
             artifact/buildinfo
-
 
           EFI="$(find "$TARGET" \
             -maxdepth 1 \
@@ -730,27 +715,20 @@ jobs:
 
           test -n "$EFI"
 
-
           cp "$EFI" \
             "artifact/firmware/ImmortalWrt-25.12-x86-64-UEFI-${BUILD_DATE}.img.gz"
 
-
           cd artifact/firmware
-
           sha256sum * > SHA256SUMS
-
           cd ../..
 
-
-          cp .config \
-            artifact/buildinfo/config.final
+          cp .config artifact/buildinfo/config.final
 
           git log -1 --format=fuller \
             > artifact/buildinfo/source.commit
 
           git describe --always --dirty \
             > artifact/buildinfo/source.version
-
 
           find "$TARGET" \
             -maxdepth 1 \
@@ -763,7 +741,6 @@ jobs:
               -name '*.bom.cdx.json' \
             \) \
             -exec cp {} artifact/buildinfo/ \;
-
 
           echo ""
           echo "========================================"
@@ -781,7 +758,7 @@ jobs:
 
 
       # ==========================================================
-      # 23. Upload firmware
+      # 24. Upload firmware
       # ==========================================================
 
       - name: Upload firmware
@@ -794,7 +771,7 @@ jobs:
 
 
       # ==========================================================
-      # 24. Upload BuildInfo
+      # 25. Upload BuildInfo
       # ==========================================================
 
       - name: Upload BuildInfo
