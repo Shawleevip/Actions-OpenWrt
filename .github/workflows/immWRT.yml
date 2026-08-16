@@ -1,6 +1,4 @@
 name: OpenWrt_25.12
-
-name: ImmortalWrt x86 Latest
 on:
   push:
     branches:
