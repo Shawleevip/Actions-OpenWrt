@@ -1,4 +1,4 @@
-name: ImmortalWrt x86 V2.1
+name: ImmortalWrt x86 V3
 on:
   push:
     branches:
@@ -246,7 +246,6 @@ jobs:
           CONFIG_KERNEL_DEBUG_INFO=y
           CONFIG_KERNEL_DEBUG_INFO_BTF=y
           CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
-          CONFIG_KERNEL_DEBUG_INFO_REDUCED=n
           CONFIG_KERNEL_KPROBES=y
           CONFIG_KERNEL_KPROBE_EVENTS=y
           CONFIG_KERNEL_XDP_SOCKETS=y
@@ -277,8 +276,6 @@ jobs:
           CONFIG_PACKAGE_luci-app-diskman=y
           CONFIG_PACKAGE_luci-app-lucky=y
           CONFIG_PACKAGE_luci-app-filebrowser=n
-          CONFIG_PACKAGE_luci-app-irqbalance=y
-          CONFIG_PACKAGE_luci-app-taskplan=n
           CONFIG_PACKAGE_luci-app-package-manager=y
           CONFIG_PACKAGE_luci-app-sqm=y
           CONFIG_PACKAGE_sqm-scripts=y
@@ -287,76 +284,73 @@ jobs:
           CONFIG_PACKAGE_tc-full=y
           CFGEOF
 
-cat >> .config <<'CFGEOF'
-CONFIG_PACKAGE_luci-app-rtp2httpd=y
-CFGEOF
+          cat >> .config <<'CFGEOF'
+          CONFIG_PACKAGE_luci-app-rtp2httpd=y
+          CFGEOF
+          
+          cat >> .config <<'CFGEOF'
+          #CONFIG_PACKAGE_luci-app-ssr-plus=n
+          #CONFIG_PACKAGE_luci-app-passwall=n
+          CONFIG_PACKAGE_luci-app-passwall2=y
+          CONFIG_PACKAGE_luci-app-openclash=y
+          #CONFIG_PACKAGE_luci-app-mihomo=n
+          #CONFIG_PACKAGE_luci-app-homeproxy=n
+          #CONFIG_PACKAGE_luci-app-fchomo=n
+          CFGEOF
 
-cat >> .config <<'CFGEOF'
-CONFIG_PACKAGE_luci-app-ssr-plus=n
-CONFIG_PACKAGE_luci-app-passwall=n
-CONFIG_PACKAGE_luci-app-passwall2=y
-CONFIG_PACKAGE_luci-app-openclash=y
-CONFIG_PACKAGE_luci-app-mihomo=n
-CONFIG_PACKAGE_luci-app-homeproxy=n
-CONFIG_PACKAGE_luci-app-fchomo=n
-CFGEOF
+          cat >> .config <<'CFGEOF'
+          CONFIG_PACKAGE_dae=y
+          CONFIG_PACKAGE_daed=y
+          CONFIG_PACKAGE_luci-app-daede=y
+          CONFIG_PACKAGE_kmod-nft-tproxy=y
+          CONFIG_PACKAGE_kmod-nft-socket=y
+          CONFIG_PACKAGE_kmod-nft-compat=y
+          CONFIG_PACKAGE_nftables=y
+          CONFIG_PACKAGE_ip-full=y
+          CONFIG_PACKAGE_v2ray-geoip=y
+          CONFIG_PACKAGE_v2ray-geosite=y
+          CFGEOF
 
-cat >> .config <<'CFGEOF'
-CONFIG_PACKAGE_dae=y
-CONFIG_PACKAGE_daed=y
-CONFIG_PACKAGE_luci-app-daede=y
-CONFIG_PACKAGE_kmod-nft-tproxy=y
-CONFIG_PACKAGE_kmod-nft-socket=y
-CONFIG_PACKAGE_kmod-nft-compat=y
-CONFIG_PACKAGE_nftables=y
-CONFIG_PACKAGE_ip-full=y
-CONFIG_PACKAGE_v2ray-geoip=y
-CONFIG_PACKAGE_v2ray-geosite=y
-CFGEOF
+          cat >> .config <<'CFGEOF'
+          CONFIG_PACKAGE_luci-app-openvpn=y
+          CONFIG_PACKAGE_openvpn-easy-rsa=y
+          CCONFIG_PACKAGE_wireguard-tools=y
+          CONFIG_PACKAGE_kmod-wireguard=y
+          CONFIG_PACKAGE_luci-app-wireguard=y
+          CONFIG_PACKAGE_luci-proto-wireguard=y
+          CFGEOF
+          
+          cat >> .config <<'CFGEOF'
+          CONFIG_PACKAGE_luci-theme-argon=y
+          CONFIG_PACKAGE_luci-app-argon-config=y
+          CFGEOF
 
-cat >> .config <<'CFGEOF'
-CONFIG_PACKAGE_luci-app-softethervpn=n
-CONFIG_PACKAGE_luci-app-openvpn=y
-CONFIG_PACKAGE_openvpn-easy-rsa=y
-CONFIG_PACKAGE_netbird=n
-CONFIG_PACKAGE_wireguard-tools=y
-CONFIG_PACKAGE_kmod-wireguard=y
-CONFIG_PACKAGE_luci-app-wireguard=y
-CONFIG_PACKAGE_luci-proto-wireguard=y
-CFGEOF
-
-cat >> .config <<'CFGEOF'
-CONFIG_PACKAGE_luci-theme-argon=y
-CONFIG_PACKAGE_luci-app-argon-config=y
-CFGEOF
-
-cat >> .config <<'CFGEOF'
-CONFIG_PACKAGE_curl=y
-CONFIG_PACKAGE_htop=y
-CONFIG_PACKAGE_nano=y
-CONFIG_PACKAGE_screen=y
-CONFIG_PACKAGE_tree=y
-CONFIG_PACKAGE_vim-fuller=n
-CONFIG_PACKAGE_wget=y
-CONFIG_PACKAGE_acme=y
-CONFIG_PACKAGE_acme-dnsapi=y
-CONFIG_PACKAGE_haproxy=y
-CONFIG_PACKAGE_socat=y
-CONFIG_SOCAT_SSL=y
-CONFIG_SING_BOX_WITH_ECH=y
-CONFIG_PACKAGE_sing-box=y
-CONFIG_PACKAGE_chinadns-ng=y
-CONFIG_PACKAGE_open-vm-tools=y
-CONFIG_PACKAGE_iperf3=y
-CONFIG_PACKAGE_iftop=y
-CONFIG_PACKAGE_tcpdump=y
-CONFIG_PACKAGE_pv=y
-CONFIG_PACKAGE_bind-host=y
-CONFIG_PACKAGE_firewall4=y
-CONFIG_PACKAGE_dns2socks=y
-CONFIG_PACKAGE_tcping=y
-CONFIG_PACKAGE_irqbalance=y
-CFGEOF
+          cat >> .config <<'CFGEOF'
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_htop=y
+          CONFIG_PACKAGE_nano=y
+          CONFIG_PACKAGE_screen=y
+          CONFIG_PACKAGE_tree=y
+          CONFIG_PACKAGE_wget=y
+          CONFIG_PACKAGE_acme=y
+          CONFIG_PACKAGE_acme-dnsapi=y
+          CONFIG_PACKAGE_haproxy=y
+          CONFIG_PACKAGE_socat=y
+          CONFIG_SOCAT_SSL=y
+          CONFIG_SING_BOX_WITH_ECH=y
+          CONFIG_PACKAGE_sing-box=y
+          CONFIG_PACKAGE_chinadns-ng=y
+          CONFIG_PACKAGE_open-vm-tools=y
+          CONFIG_PACKAGE_iperf3=y
+          CONFIG_PACKAGE_iftop=y
+          CONFIG_PACKAGE_tcpdump=y
+          CONFIG_PACKAGE_pv=y
+          CONFIG_PACKAGE_bind-host=y
+          CONFIG_PACKAGE_firewall4=y
+          CONFIG_PACKAGE_dns2socks=y
+          CONFIG_PACKAGE_tcping=y
+          CONFIG_PACKAGE_irqbalance=y
+          CFGEOF
 
           make defconfig 2>&1 | tee preflight/defconfig.log
 
