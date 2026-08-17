@@ -451,7 +451,6 @@ jobs:
 
       # 14. Pre-flight package compilation
       - name: PRE-FLIGHT - Package compilation
-      - name: PRE-FLIGHT - Package compilation
         working-directory: ./openwrt
         shell: bash
         run: |
