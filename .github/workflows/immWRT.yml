@@ -45,7 +45,7 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup /usr/lib/jvm /etc/mysql /etc/php || true
           sudo -E apt-get update
-          sudo -E apt-get -y install ack antlr3 asciidoc autoconf autom autopoint binutils bison build-essential \
+          sudo -E apt-get -y install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
             bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gcc-multilib g++-multilib \
             gettext git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libfuse-dev \
             libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev \
@@ -513,14 +513,13 @@ jobs:
           # 多线程编译，失败自动回退单线程输出详细日志
           make -j$(nproc) 2>&1 | tee build.log || make -j1 V=s 2>&1 | tee -a build.log
 
-      # 17. 压缩编译日志
+      # 17. 压缩编译日志（优化容错：前置失败时不报错）
       - name: Compress build log
         if: always()
-        working-directory: ./openwrt
         shell: bash
         run: |
-          if [ -f build.log ]; then
-            gzip -9 -f build.log
+          if [ -f openwrt/build.log ]; then
+            gzip -9 -f openwrt/build.log
           fi
 
       # 18. 上传编译日志
