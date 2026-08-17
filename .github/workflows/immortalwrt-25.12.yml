@@ -884,7 +884,7 @@ jobs:
             **编译时间：** ${{ env.date }}（北京时间）
             **目标平台：** x86_64 Generic
             **固件格式：** EFI
-            **主要组件：**
+            **主要组件：** 
             - OpenClash
             - PassWall2
             - DAED / DAEDE
