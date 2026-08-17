@@ -1,4 +1,4 @@
-name: ImmortalWrt x86 Latest
+name: ImmortalWrt x86 V2
 on:
   push:
     branches:
@@ -12,17 +12,18 @@ jobs:
     permissions:
       contents: write
       actions: write
-
-    name: Build ${{matrix.target}}
+    name: Build ${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
         target: [25.12]
 
     steps:
+      # 1. Checkout
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2. Maximize build space
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
@@ -35,6 +36,7 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
+      # 3. System preparation
       - name: Space cleanup & Timezone
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -45,6 +47,7 @@ jobs:
           sudo -E apt-get -y install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk gcc-multilib g++-multilib gettext genisoimage git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool llvm lrzsz ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev scdoc
           sudo -E timedatectl set-timezone "Asia/Shanghai"
 
+      # 4. Build date
       - name: Get current date
         id: date
         env:
@@ -53,54 +56,172 @@ jobs:
           echo "date=$(TZ=Asia/Shanghai date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
           echo "date2=$(TZ=Asia/Shanghai date +'%m/%d %Y')" >> $GITHUB_ENV
           echo "date3=$(TZ=Asia/Shanghai date +'%m.%d')" >> $GITHUB_ENV
-        
+
+      # 5. Clone ImmortalWrt
       - name: Clone source code
         env:
           REPO_URL: https://github.com/immortalwrt/immortalwrt
           REPO_BRANCH: openwrt-25.12
         run: |
-          git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
-          cd openwrt
-          sed -i '$a src-git small https://github.com/kenzok8/small' feeds.conf.default
+          git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
 
+      # 6. Update feeds
       - name: Update feeds
         working-directory: ./openwrt
+        shell: bash
         run: |
-          sed -i '1i src-git vmware https://github.com/vmware/open-vm-tools' feeds.conf.default
-          sed -i '2i src-git rtp2httpd https://github.com/stackia/rtp2httpd.git' feeds.conf.default
-          sed -i '3i src-git lucky https://github.com/gdy666/luci-app-lucky' feeds.conf.default
+          set -euo pipefail
+          mkdir -p preflight
+          sed -i '1i src-git kenzo https://github.com/kenzok8/openwrt-packages' feeds.conf.default
+          sed -i '2i src-git small https://github.com/kenzok8/small' feeds.conf.default
+          sed -i '3i src-git vmware https://github.com/vmware/open-vm-tools' feeds.conf.default
+          sed -i '4i src-git rtp2httpd https://github.com/stackia/rtp2httpd.git' feeds.conf.default
+          sed -i '5i src-git lucky https://github.com/gdy666/luci-app-lucky' feeds.conf.default
+          ./scripts/feeds update -a 2>&1 | tee preflight/feeds-update.log
+          rm -rf feeds/luci/applications/luci-app-mosdns
+          rm -rf feeds/luci/applications/luci-app-dae
+          rm -rf feeds/luci/applications/luci-app-daed
+          rm -rf feeds/packages/net/alist
+          rm -rf feeds/packages/net/adguardhome
+          rm -rf feeds/packages/net/mosdns
+          rm -rf feeds/packages/net/xray*
+          rm -rf feeds/packages/net/v2ray-core
+          rm -rf feeds/packages/utils/v2dat
+          rm -rf feeds/packages/lang/golang
+          git clone --depth 1 -b 1.26 https://github.com/kenzok8/golang.git feeds/packages/lang/golang
+          ./scripts/feeds install -a 2>&1 | tee preflight/feeds-install.log
 
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
-
-          # 删除 small 中存在递归依赖的 luci-app-fchomo
-          rm -rf package/feeds/small/luci-app-fchomo
-
-          # 删除 trojan-plus，避免其无效的 boost-system 依赖警告
+      # 7. Remove conflicting packages and install openwrt-daede
+      - name: Install openwrt-daede
+        working-directory: ./openwrt
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p preflight
+          rm -rf package/feeds/small/dae
+          rm -rf package/feeds/small/daed
+          rm -rf package/feeds/small/luci-app-daed
+          rm -rf package/feeds/luci/luci-app-dae
+          rm -rf package/feeds/luci/luci-app-daed
+          rm -rf package/feeds/kenzo/luci-app-dockerman
+          rm -rf package/feeds/small/trojan
           rm -rf package/feeds/small/trojan-plus
+          rm -rf package/dae package/daed package/luci-app-daede
+          git clone --depth 1 https://github.com/kenzok8/openwrt-daede.git /tmp/openwrt-daede
+          cp -a /tmp/openwrt-daede/dae package/dae
+          cp -a /tmp/openwrt-daede/daed package/daed
+          cp -a /tmp/openwrt-daede/luci-app-daede package/luci-app-daede
+          echo "===== Installed openwrt-daede ====="
+          find package/dae package/daed package/luci-app-daede -maxdepth 2 -type f | sort | head -100
+          echo "===== DAED Makefile ====="
+          grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE|PKG_SOURCE_URL|PKG_HASH)' package/daed/Makefile || true
+          echo "===== DAE Makefile ====="
+          grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE|PKG_SOURCE_URL|PKG_HASH)' package/dae/Makefile || true
+          echo "===== LUCI-DAEDE Makefile ====="
+          grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE)' package/luci-app-daede/Makefile || true
 
+      # 8. Preflight feed and package validation
+      - name: PRE-FLIGHT - Package validation
+        working-directory: ./openwrt
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=================================================="
+          echo " PRE-FLIGHT - Package validation"
+          echo "=================================================="
+          mkdir -p preflight
+          check_file() {
+            local name="$1"
+            local path="$2"
+            if [ -f "$path" ]; then
+              echo "[ OK ] $name -> $path"
+            else
+              echo "[FAIL] $name -> $path"
+              exit 1
+            fi
+          }
+          echo "===== Required package Makefiles ====="
+          check_file "PassWall2" "package/feeds/small/luci-app-passwall2/Makefile"
+          check_file "DAE" "package/dae/Makefile"
+          check_file "DAED" "package/daed/Makefile"
+          check_file "LUCI-DAEDE" "package/luci-app-daede/Makefile"
+          check_file "RTP2HTTPD" "package/feeds/rtp2httpd/luci-app-rtp2httpd/Makefile"
+          check_file "Lucky" "package/feeds/lucky/luci-app-lucky/Makefile"
+          check_file "OpenClash" "feeds/luci/applications/luci-app-openclash/Makefile"
+          echo
+          echo "===== Old DAE packages must not exist ====="
+          for p in package/feeds/small/dae package/feeds/small/daed package/feeds/luci/luci-app-dae package/feeds/luci/luci-app-daed package/feeds/small/luci-app-daed; do
+            if [ -e "$p" ]; then
+              echo "[FAIL] Old package still exists: $p"
+              exit 1
+            fi
+            echo "[ OK ] Removed: $p"
+          done
+          echo
+          echo "===== Unwanted noisy packages must not exist ====="
+          for p in package/feeds/kenzo/luci-app-dockerman package/feeds/small/trojan package/feeds/small/trojan-plus; do
+            if [ -e "$p" ]; then
+              echo "[FAIL] Unwanted package still exists: $p"
+              exit 1
+            fi
+            echo "[ OK ] Removed: $p"
+          done
+          echo
+          echo "===== Package versions ====="
+          {
+            echo "===== DAED ====="
+            grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE|PKG_HASH)' package/daed/Makefile || true
+            echo
+            echo "===== DAE ====="
+            grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE|PKG_HASH)' package/dae/Makefile || true
+            echo
+            echo "===== LUCI-DAEDE ====="
+            grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE)' package/luci-app-daede/Makefile || true
+            echo
+            echo "===== PASSWALL2 ====="
+            grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE)' package/feeds/small/luci-app-passwall2/Makefile || true
+          } | tee preflight/package-versions.txt
+          echo
+          echo "===== DAED dependency ====="
+          grep -nE 'DEPENDS.*(vmlinux-btf|v2ray-geoip|v2ray-geosite|kmod-sched-bpf|kmod-veth|KERNEL_XDP_SOCKETS)' package/daed/Makefile || true
+          echo
+          echo "===== DAE dependency ====="
+          grep -nE 'DEPENDS.*(vmlinux-btf|v2ray-geoip|v2ray-geosite|kmod-sched-bpf|kmod-veth|KERNEL_XDP_SOCKETS)' package/dae/Makefile || true
+          echo
+          echo "===== Geo packages ====="
+          find feeds package -type f \( -path '*v2ray-geoip*' -o -path '*v2ray-geosite*' \) 2>/dev/null | head -50 | tee preflight/geodata-files.txt
+          echo
+          echo "===== Residual DAE references ====="
+          grep -R --line-number -E 'luci-app-dae|luci-app-daed|package/feeds/.*/dae|package/feeds/.*/daed' package feeds 2>/dev/null | head -100 | tee preflight/residual-dae-references.txt || true
+          echo
+          echo "===== Dependency warnings scan ====="
+          grep -R --line-number -E 'vmlinux-btf|dae-geoip|dae-geosite|daed-geoip|daed-geosite|luci-lib-docker|cgroupfs-mount|boost-system' package feeds 2>/dev/null | head -100 | tee preflight/dependency-warnings-scan.txt || true
+
+      # 9. Get new themes
       - name: Get new themes
         working-directory: ./openwrt
+        shell: bash
         run: |
+          set -euo pipefail
           rm -rf package/feeds/luci/luci-theme-argon
           rm -rf package/feeds/luci/luci-app-argon-config
           rm -rf package/feeds/luci/luci-theme-infinityfreedom
           rm -rf package/feeds/luci/luci/luci-theme-design
           rm -rf package/feeds/luci/luci-theme-opentopd
           rm -rf package/feeds/luci/luci-theme-neobird
-
           git clone -b master https://github.com/jerrykuku/luci-theme-argon.git package/feeds/luci/luci-theme-argon
           git clone -b master https://github.com/jerrykuku/luci-app-argon-config.git package/feeds/luci/luci-app-argon-config
 
-      - name: Costom configure file
+      # 10. Configure firmware
+      - name: Custom configure file
         working-directory: ./openwrt
+        shell: bash
         run: |
+          set -euo pipefail
+          mkdir -p preflight
           rm -f ./.config*
           touch ./.config
-
-          # 固定固件系统时区为北京时间
           mkdir -p package/base-files/files/etc/config
-
           if [ -f package/base-files/files/etc/config/system ]; then
             sed -i "s/^[[:space:]]*option timezone.*/	option timezone 'CST-8'/" package/base-files/files/etc/config/system
             sed -i "s/^[[:space:]]*option zonename.*/	option zonename 'Asia\/Shanghai'/" package/base-files/files/etc/config/system
@@ -113,34 +234,37 @@ jobs:
           EOF
           fi
 
-          #
-          # ========================固件定制部分========================
-          #
-
-          # 编译x64固件:
+          # Target
           cat >> .config <<EOF
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_Generic=y
-          EOF
-
-          # 固件大小设置:
-          cat >> .config <<EOF
           CONFIG_TARGET_KERNEL_PARTSIZE=128
           CONFIG_TARGET_ROOTFS_PARTSIZE=640
-          EOF
-
-          # 固件压缩:
-          cat >> .config <<EOF
           CONFIG_TARGET_IMAGES_GZIP=y
-          EOF
-
-          # 编译UEFI固件:
-          cat >> .config <<EOF
           CONFIG_EFI_IMAGES=y
           EOF
 
-          # IPv6支持:
+          # Kernel BTF / eBPF / XDP
+          cat >> .config <<EOF
+          CONFIG_DEVEL=y
+          CONFIG_BPF_TOOLCHAIN_HOST=y
+          CONFIG_KERNEL_BPF_EVENTS=y
+          CONFIG_KERNEL_CGROUP_BPF=y
+          CONFIG_KERNEL_DEBUG_INFO=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
+          CONFIG_KERNEL_DEBUG_INFO_REDUCED=n
+          CONFIG_KERNEL_KPROBES=y
+          CONFIG_KERNEL_KPROBE_EVENTS=y
+          CONFIG_KERNEL_XDP_SOCKETS=y
+          CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
+          CONFIG_PACKAGE_kmod-sched-core=y
+          CONFIG_PACKAGE_kmod-sched-bpf=y
+          CONFIG_PACKAGE_kmod-veth=y
+          EOF
+
+          # IPv6
           cat >> .config <<EOF
           CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
           CONFIG_PACKAGE_ipv6helper=y
@@ -151,14 +275,14 @@ jobs:
           CONFIG_PACKAGE_kmod-nft-nat6=y
           EOF
 
-          # bonding支持:
+          # Bonding
           cat >> .config <<EOF
           CONFIG_PACKAGE_kmod-bonding=y
           CONFIG_PACKAGE_proto-bonding=y
           CONFIG_PACKAGE_luci-proto-bonding=y
           EOF
 
-          # 常用LuCI插件选择:
+          # LuCI
           cat >> .config <<EOF
           CONFIG_PACKAGE_luci=y
           CONFIG_PACKAGE_luci-app-diskman=y
@@ -172,28 +296,38 @@ jobs:
           CONFIG_PACKAGE_kmod-sched-cake=y
           CONFIG_PACKAGE_kmod-ifb=y
           CONFIG_PACKAGE_tc-full=y
+          EOF
 
           # IPTV
+          cat >> .config <<EOF
           CONFIG_PACKAGE_luci-app-rtp2httpd=y
+          EOF
 
-          # 科学上网
+          # Proxy
+          cat >> .config <<EOF
           CONFIG_PACKAGE_luci-app-ssr-plus=n
           CONFIG_PACKAGE_luci-app-passwall=n
           CONFIG_PACKAGE_luci-app-passwall2=y
           CONFIG_PACKAGE_luci-app-openclash=y
           CONFIG_PACKAGE_luci-app-mihomo=n
           CONFIG_PACKAGE_luci-app-homeproxy=n
+          EOF
 
-          # DAED
+          # DAEDE
+          cat >> .config <<EOF
           CONFIG_PACKAGE_daed=y
-          CONFIG_PACKAGE_luci-app-daed=y
+          CONFIG_PACKAGE_luci-app-daede=y
           CONFIG_PACKAGE_kmod-nft-tproxy=y
           CONFIG_PACKAGE_kmod-nft-socket=y
           CONFIG_PACKAGE_kmod-nft-compat=y
           CONFIG_PACKAGE_nftables=y
           CONFIG_PACKAGE_ip-full=y
+          CONFIG_PACKAGE_v2ray-geoip=y
+          CONFIG_PACKAGE_v2ray-geosite=y
+          EOF
 
-          # VPN与组网
+          # VPN
+          cat >> .config <<EOF
           CONFIG_PACKAGE_luci-app-softethervpn=n
           CONFIG_PACKAGE_luci-app-openvpn=y
           CONFIG_PACKAGE_luci-app-openvpn-server=y
@@ -205,12 +339,12 @@ jobs:
           CONFIG_PACKAGE_luci-proto-wireguard=y
           EOF
 
-          # LuCI主题:
+          # Theme
           cat >> .config <<EOF
           CONFIG_PACKAGE_luci-theme-argon=y
           EOF
 
-          # 常用软件包:
+          # Common packages
           cat >> .config <<EOF
           CONFIG_PACKAGE_curl=y
           CONFIG_PACKAGE_htop=y
@@ -240,53 +374,128 @@ jobs:
           CONFIG_PACKAGE_irqbalance=y
           EOF
 
-          # 取消编译VMware镜像以及镜像填充
-          # cat >> .config <<EOF
-          # # CONFIG_TARGET_IMAGES_PAD is not set
-          # # CONFIG_VMDK_IMAGES is not set
-          # EOF
+          sed -i 's/^[ \t]*//g' .config
+          make defconfig 2>&1 | tee preflight/defconfig.log
 
-          #
-          # ========================固件定制部分结束========================
-          #
+          echo "===== Selected package configuration ====="
+          grep -E '^CONFIG_PACKAGE_(luci-app-passwall2|luci-app-openclash|daed|dae|luci-app-daede|luci-app-rtp2httpd|luci-app-lucky|v2ray-geoip|v2ray-geosite)=' .config | tee preflight/selected-packages.txt || true
 
-          sed -i 's/^[ \t]*//g' ./.config
+          echo "===== DAEDE backend selection ====="
+          grep -E '^CONFIG_PACKAGE_luci-app-daede_(dae|daed)=' .config | tee preflight/daede-backend.txt || true
 
-          make defconfig
+          echo "===== Kernel BTF configuration ====="
+          grep -E '^CONFIG_(DEVEL|BPF_TOOLCHAIN_HOST|KERNEL_BPF_EVENTS|KERNEL_CGROUP_BPF|KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_DEBUG_INFO_BTF_MODULES|KERNEL_DEBUG_INFO_REDUCED|KERNEL_KPROBES|KERNEL_KPROBE_EVENTS|KERNEL_XDP_SOCKETS)=' .config | tee preflight/btf-config.txt || true
 
-          echo "===== DAED dependency check ====="
-          grep -E 'CONFIG_(DEBUG_INFO_BTF|DEBUG_INFO_BTF_MODULES|BPF|BPF_SYSCALL|KPROBES|KALLSYMS)' .config || true
-          echo "================================"
+          echo "===== LLVM / Clang environment ====="
+          {
+            echo "PATH=$PATH"
+            echo "CC=${CC:-<unset>}"
+            echo "HOSTCC=${HOSTCC:-<unset>}"
+            echo "CLANG=${CLANG:-<unset>}"
+            echo "LLVM=${LLVM:-<unset>}"
+            echo
+            which clang || true
+            clang --version || true
+            which llvm-config || true
+            llvm-config --version || true
+          } | tee preflight/llvm.txt
 
+          echo "===== Invalid clang search ====="
+          grep -R --line-number "/invalid/clang" .config include package feeds 2>/dev/null | head -100 | tee preflight/invalid-clang.txt || true
+
+      # 11. PRE-FLIGHT dependency resolution
+      - name: PRE-FLIGHT - Dependency resolution
+        working-directory: ./openwrt
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=================================================="
+          echo " PRE-FLIGHT - Dependency resolution"
+          echo "=================================================="
+          mkdir -p preflight
+          make package/dae/compile V=s -j1 2>&1 | tee preflight/dae-compile.log
+          make package/daed/compile V=s -j1 2>&1 | tee preflight/daed-compile.log
+          make package/luci-app-daede/compile V=s -j1 2>&1 | tee preflight/daede-luci-compile.log
+          echo "===== DAEDE package preflight compile passed ====="
+
+      # 12. Upload PRE-FLIGHT logs
+      - name: Upload preflight logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-preflight-${{ env.date }}
+          path: ./openwrt/preflight/
+          if-no-files-found: warn
+          retention-days: 7
+
+      # 13. Full firmware compilation
       - name: Compile the firmware
         working-directory: ./openwrt
+        shell: bash
         run: |
+          set -o pipefail
+          echo "=================================================="
+          echo " ALL PRE-FLIGHT CHECKS PASSED"
+          echo " Starting full firmware compilation"
+          echo "=================================================="
           make download -j8
-          make -j$(nproc)
+          make -j1 V=s 2>&1 | tee build.log
 
+      # 14. Compress build log
+      - name: Compress build log
+        if: always()
+        working-directory: ./openwrt
+        shell: bash
+        run: |
+          if [ -f build.log ]; then
+            gzip -9 -f build.log
+          fi
+
+      # 15. Upload build log
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-build-log-${{ env.date }}
+          path: ./openwrt/build.log.gz
+          if-no-files-found: warn
+          retention-days: 7
+
+      # 16. Get kernel version
       - name: Get kernel version
         working-directory: ./openwrt
+        shell: bash
         run: |
-          KERNEL_VERSION=$(make -s kernelversion)
-          echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV          
+          set -euo pipefail
+          KERNEL_MAKEFILE=$(find build_dir -path '*/linux-x86_64/linux-*/Makefile' -type f | head -1)
+          if [ -z "$KERNEL_MAKEFILE" ]; then
+            echo "ERROR: Linux kernel Makefile not found."
+            exit 1
+          fi
+          KERNEL_DIR=$(dirname "$KERNEL_MAKEFILE")
+          VERSION=$(grep '^VERSION = ' "$KERNEL_MAKEFILE" | awk '{print $3}')
+          PATCHLEVEL=$(grep '^PATCHLEVEL = ' "$KERNEL_MAKEFILE" | awk '{print $3}')
+          SUBLEVEL=$(grep '^SUBLEVEL = ' "$KERNEL_MAKEFILE" | awk '{print $3}')
+          KERNEL_VERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
+          echo "Kernel source: $KERNEL_DIR"
+          echo "Kernel version: $KERNEL_VERSION"
+          echo "KERNEL_VERSION=$KERNEL_VERSION" >> "$GITHUB_ENV"
 
+      # 17. Prepare artifacts
       - name: Prepare artifact
         working-directory: ./openwrt
+        shell: bash
         run: |
-          mkdir -p ./artifact/firmware
-          mkdir -p ./artifact/package
-          mkdir -p ./artifact/buildinfo
+          set -euo pipefail
+          mkdir -p artifact/firmware artifact/package artifact/buildinfo
+          find ./bin/targets/ -type f -name "openwrt-x86-64-generic-kernel.bin" -delete
+          find ./bin/targets/ -type f -name "openwrt-x86-64-generic-squashfs-rootfs.img.gz" -delete
+          find ./bin/targets/ -type d -name "packages" -prune -exec rm -rf {} +
+          cp $(find ./bin/targets/ -type f -name "*combined-efi.img.gz") ./artifact/firmware/
+          cp $(find ./bin/packages/ -type f -name "*.ipk") ./artifact/package/
+          cp $(find ./bin/targets/ -type f \( -name "*.buildinfo" -o -name "*.manifest" \)) ./artifact/buildinfo/
 
-          set +e
-          rm -rf $(find ./bin/targets/ -type f -name "openwrt-x86-64-generic-kernel.bin")
-          rm -rf $(find ./bin/targets/ -type f -name "openwrt-x86-64-generic-squashfs-rootfs.img.gz")
-          rm -rf $(find ./bin/targets/ -type d -name "packages")
-          set -e
-
-          cp -rf $(find ./bin/targets/ -type f -name "*combined-efi.img.gz") ./artifact/firmware/
-          cp -rf $(find ./bin/packages/ -type f -name "*.ipk") ./artifact/package/
-          cp -rf $(find ./bin/targets/ -type f \( -name "*.buildinfo" -o -name "*.manifest" \)) ./artifact/buildinfo/
-
+      # 18. Deliver buildinfo
       - name: Deliver buildinfo
         uses: actions/upload-artifact@v4
         with:
@@ -294,6 +503,7 @@ jobs:
           path: ./openwrt/artifact/buildinfo/
           retention-days: 30
 
+      # 19. Deliver packages
       - name: Deliver package
         uses: actions/upload-artifact@v4
         with:
@@ -301,6 +511,7 @@ jobs:
           path: ./openwrt/artifact/package/
           retention-days: 30
 
+      # 20. Deliver firmware
       - name: Deliver firmware
         uses: actions/upload-artifact@v4
         with:
@@ -308,9 +519,7 @@ jobs:
           path: ./openwrt/artifact/firmware/
           retention-days: 30
 
-      # ============================================================
-      # 自动发布 GitHub Release
-      # ============================================================
+      # 21. GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -318,29 +527,23 @@ jobs:
           name: OpenWrt 25.12 x86_64 - ${{ env.date }}
           body: |
             ## OpenWrt 25.12 x86_64
-            
             **固件内核：** ${{ env.KERNEL_VERSION }}
-
             **编译时间：** ${{ env.date }}（北京时间）
-
             **目标平台：** x86_64 Generic
-
             **固件格式：** EFI
-
             **主要组件：**
             - OpenClash
             - PassWall2
-            - DAED
+            - DAED / DAEDE
             - SQM / CAKE
             - WireGuard
             - OpenVPN
             - Lucky
             - RTP2HTTPD
             - Argon Theme
-
             **源码：** ImmortalWrt openwrt-25.12
+            **DAE/DAED：** kenzok8/openwrt-daede
             **软件库：** kenzok8/small
-
             > 本 Release 为 GitHub Actions 自动编译发布。
           files: |
             ./openwrt/artifact/firmware/*
@@ -351,6 +554,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 22. Delete old workflow runs
       - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         continue-on-error: true
