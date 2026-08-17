@@ -76,7 +76,6 @@ jobs:
           sed -i '2i src-git small https://github.com/kenzok8/small' feeds.conf.default
           sed -i '3i src-git vmware https://github.com/vmware/open-vm-tools' feeds.conf.default
           sed -i '4i src-git rtp2httpd https://github.com/stackia/rtp2httpd.git' feeds.conf.default
-          sed -i '5i src-git lucky https://github.com/gdy666/luci-app-lucky' feeds.conf.default
           ./scripts/feeds update -a 2>&1 | tee preflight/feeds-update.log
           rm -rf feeds/luci/applications/luci-app-mosdns
           rm -rf feeds/luci/applications/luci-app-dae
@@ -91,7 +90,21 @@ jobs:
           git clone --depth 1 -b 1.26 https://github.com/kenzok8/golang.git feeds/packages/lang/golang
           ./scripts/feeds install -a 2>&1 | tee preflight/feeds-install.log
 
-      # 7. Remove conflicting packages and install openwrt-daede
+      # 7. Install Lucky directly into package tree
+      - name: Install Lucky
+        working-directory: ./openwrt
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p preflight
+          rm -rf package/lucky
+          git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/lucky
+          echo "===== Installed Lucky ====="
+          find package/lucky -maxdepth 3 -type f | sort | head -100
+          echo "===== Lucky Makefile ====="
+          grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE|PKG_SOURCE_URL|PKG_HASH|LUCI_DEPENDS|DEPENDS)' package/lucky/luci-app-lucky/Makefile || true
+
+      # 8. Remove conflicting packages and install openwrt-daede
       - name: Install openwrt-daede
         working-directory: ./openwrt
         shell: bash
@@ -120,7 +133,7 @@ jobs:
           echo "===== LUCI-DAEDE Makefile ====="
           grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE)' package/luci-app-daede/Makefile || true
 
-      # 8. Preflight feed and package validation
+      # 9. Preflight package validation
       - name: PRE-FLIGHT - Package validation
         working-directory: ./openwrt
         shell: bash
@@ -146,7 +159,7 @@ jobs:
           check_file "DAED" "package/daed/Makefile"
           check_file "LUCI-DAEDE" "package/luci-app-daede/Makefile"
           check_file "RTP2HTTPD" "package/feeds/rtp2httpd/luci-app-rtp2httpd/Makefile"
-          check_file "Lucky" "package/feeds/lucky/luci-app-lucky/Makefile"
+          check_file "Lucky" "package/lucky/luci-app-lucky/Makefile"
           check_file "OpenClash" "feeds/luci/applications/luci-app-openclash/Makefile"
           echo
           echo "===== Old DAE packages must not exist ====="
@@ -169,6 +182,9 @@ jobs:
           echo
           echo "===== Package versions ====="
           {
+            echo "===== Lucky ====="
+            grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE|PKG_HASH)' package/lucky/luci-app-lucky/Makefile || true
+            echo
             echo "===== DAED ====="
             grep -E '^(PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE|PKG_HASH)' package/daed/Makefile || true
             echo
@@ -197,7 +213,7 @@ jobs:
           echo "===== Dependency warnings scan ====="
           grep -R --line-number -E 'vmlinux-btf|dae-geoip|dae-geosite|daed-geoip|daed-geosite|luci-lib-docker|cgroupfs-mount|boost-system' package feeds 2>/dev/null | head -100 | tee preflight/dependency-warnings-scan.txt || true
 
-      # 9. Get new themes
+      # 10. Get new themes
       - name: Get new themes
         working-directory: ./openwrt
         shell: bash
@@ -212,7 +228,7 @@ jobs:
           git clone -b master https://github.com/jerrykuku/luci-theme-argon.git package/feeds/luci/luci-theme-argon
           git clone -b master https://github.com/jerrykuku/luci-app-argon-config.git package/feeds/luci/luci-app-argon-config
 
-      # 10. Configure firmware
+      # 11. Configure firmware
       - name: Custom configure file
         working-directory: ./openwrt
         shell: bash
@@ -233,7 +249,6 @@ jobs:
                   option zonename 'Asia/Shanghai'
           EOF
           fi
-
           # Target
           cat >> .config <<EOF
           CONFIG_TARGET_x86=y
@@ -244,7 +259,6 @@ jobs:
           CONFIG_TARGET_IMAGES_GZIP=y
           CONFIG_EFI_IMAGES=y
           EOF
-
           # Kernel BTF / eBPF / XDP
           cat >> .config <<EOF
           CONFIG_DEVEL=y
@@ -263,7 +277,6 @@ jobs:
           CONFIG_PACKAGE_kmod-sched-bpf=y
           CONFIG_PACKAGE_kmod-veth=y
           EOF
-
           # IPv6
           cat >> .config <<EOF
           CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
@@ -274,14 +287,12 @@ jobs:
           CONFIG_PACKAGE_ip6tables=y
           CONFIG_PACKAGE_kmod-nft-nat6=y
           EOF
-
           # Bonding
           cat >> .config <<EOF
           CONFIG_PACKAGE_kmod-bonding=y
           CONFIG_PACKAGE_proto-bonding=y
           CONFIG_PACKAGE_luci-proto-bonding=y
           EOF
-
           # LuCI
           cat >> .config <<EOF
           CONFIG_PACKAGE_luci=y
@@ -297,12 +308,10 @@ jobs:
           CONFIG_PACKAGE_kmod-ifb=y
           CONFIG_PACKAGE_tc-full=y
           EOF
-
           # IPTV
           cat >> .config <<EOF
           CONFIG_PACKAGE_luci-app-rtp2httpd=y
           EOF
-
           # Proxy
           cat >> .config <<EOF
           CONFIG_PACKAGE_luci-app-ssr-plus=n
@@ -312,7 +321,6 @@ jobs:
           CONFIG_PACKAGE_luci-app-mihomo=n
           CONFIG_PACKAGE_luci-app-homeproxy=n
           EOF
-
           # DAEDE
           cat >> .config <<EOF
           CONFIG_PACKAGE_daed=y
@@ -325,7 +333,6 @@ jobs:
           CONFIG_PACKAGE_v2ray-geoip=y
           CONFIG_PACKAGE_v2ray-geosite=y
           EOF
-
           # VPN
           cat >> .config <<EOF
           CONFIG_PACKAGE_luci-app-softethervpn=n
@@ -338,12 +345,10 @@ jobs:
           CONFIG_PACKAGE_luci-app-wireguard=y
           CONFIG_PACKAGE_luci-proto-wireguard=y
           EOF
-
           # Theme
           cat >> .config <<EOF
           CONFIG_PACKAGE_luci-theme-argon=y
           EOF
-
           # Common packages
           cat >> .config <<EOF
           CONFIG_PACKAGE_curl=y
@@ -373,19 +378,14 @@ jobs:
           CONFIG_PACKAGE_geoview=y
           CONFIG_PACKAGE_irqbalance=y
           EOF
-
           sed -i 's/^[ \t]*//g' .config
           make defconfig 2>&1 | tee preflight/defconfig.log
-
           echo "===== Selected package configuration ====="
           grep -E '^CONFIG_PACKAGE_(luci-app-passwall2|luci-app-openclash|daed|dae|luci-app-daede|luci-app-rtp2httpd|luci-app-lucky|v2ray-geoip|v2ray-geosite)=' .config | tee preflight/selected-packages.txt || true
-
           echo "===== DAEDE backend selection ====="
           grep -E '^CONFIG_PACKAGE_luci-app-daede_(dae|daed)=' .config | tee preflight/daede-backend.txt || true
-
           echo "===== Kernel BTF configuration ====="
           grep -E '^CONFIG_(DEVEL|BPF_TOOLCHAIN_HOST|KERNEL_BPF_EVENTS|KERNEL_CGROUP_BPF|KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_DEBUG_INFO_BTF_MODULES|KERNEL_DEBUG_INFO_REDUCED|KERNEL_KPROBES|KERNEL_KPROBE_EVENTS|KERNEL_XDP_SOCKETS)=' .config | tee preflight/btf-config.txt || true
-
           echo "===== LLVM / Clang environment ====="
           {
             echo "PATH=$PATH"
@@ -399,11 +399,10 @@ jobs:
             which llvm-config || true
             llvm-config --version || true
           } | tee preflight/llvm.txt
-
           echo "===== Invalid clang search ====="
           grep -R --line-number "/invalid/clang" .config include package feeds 2>/dev/null | head -100 | tee preflight/invalid-clang.txt || true
 
-      # 11. PRE-FLIGHT dependency resolution
+      # 12. PRE-FLIGHT dependency resolution
       - name: PRE-FLIGHT - Dependency resolution
         working-directory: ./openwrt
         shell: bash
@@ -418,7 +417,7 @@ jobs:
           make package/luci-app-daede/compile V=s -j1 2>&1 | tee preflight/daede-luci-compile.log
           echo "===== DAEDE package preflight compile passed ====="
 
-      # 12. Upload PRE-FLIGHT logs
+      # 13. Upload PRE-FLIGHT logs
       - name: Upload preflight logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -428,7 +427,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      # 13. Full firmware compilation
+      # 14. Full firmware compilation
       - name: Compile the firmware
         working-directory: ./openwrt
         shell: bash
@@ -441,7 +440,7 @@ jobs:
           make download -j8
           make -j1 V=s 2>&1 | tee build.log
 
-      # 14. Compress build log
+      # 15. Compress build log
       - name: Compress build log
         if: always()
         working-directory: ./openwrt
@@ -451,7 +450,7 @@ jobs:
             gzip -9 -f build.log
           fi
 
-      # 15. Upload build log
+      # 16. Upload build log
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
@@ -461,7 +460,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      # 16. Get kernel version
+      # 17. Get kernel version
       - name: Get kernel version
         working-directory: ./openwrt
         shell: bash
@@ -481,7 +480,7 @@ jobs:
           echo "Kernel version: $KERNEL_VERSION"
           echo "KERNEL_VERSION=$KERNEL_VERSION" >> "$GITHUB_ENV"
 
-      # 17. Prepare artifacts
+      # 18. Prepare artifacts
       - name: Prepare artifact
         working-directory: ./openwrt
         shell: bash
@@ -495,7 +494,7 @@ jobs:
           cp $(find ./bin/packages/ -type f -name "*.ipk") ./artifact/package/
           cp $(find ./bin/targets/ -type f \( -name "*.buildinfo" -o -name "*.manifest" \)) ./artifact/buildinfo/
 
-      # 18. Deliver buildinfo
+      # 19. Deliver buildinfo
       - name: Deliver buildinfo
         uses: actions/upload-artifact@v4
         with:
@@ -503,7 +502,7 @@ jobs:
           path: ./openwrt/artifact/buildinfo/
           retention-days: 30
 
-      # 19. Deliver packages
+      # 20. Deliver packages
       - name: Deliver package
         uses: actions/upload-artifact@v4
         with:
@@ -511,7 +510,7 @@ jobs:
           path: ./openwrt/artifact/package/
           retention-days: 30
 
-      # 20. Deliver firmware
+      # 21. Deliver firmware
       - name: Deliver firmware
         uses: actions/upload-artifact@v4
         with:
@@ -519,7 +518,7 @@ jobs:
           path: ./openwrt/artifact/firmware/
           retention-days: 30
 
-      # 21. GitHub Release
+      # 22. GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -554,7 +553,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 22. Delete old workflow runs
+      # 23. Delete old workflow runs
       - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         continue-on-error: true
