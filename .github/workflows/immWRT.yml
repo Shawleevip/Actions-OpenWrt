@@ -121,7 +121,7 @@ jobs:
           git clone --depth 1 https://github.com/stackia/rtp2httpd.git /tmp/rtp2httpd
           cp -a /tmp/rtp2httpd/openwrt-support/* package/custom/
 
-      # 8. 安装优化版 DAE/DAED 全家桶
+      # 8. 安装优化版 DAE/DAED 全家桶（含 vmlinux-btf 依赖）
       - name: Install openwrt-daede
         working-directory: ./openwrt
         shell: bash
@@ -130,21 +130,24 @@ jobs:
           # 清理旧版本 dae/daed
           rm -rf package/feeds/small/dae package/feeds/small/daed package/feeds/small/luci-app-daed
           rm -rf package/feeds/luci/luci-app-dae package/feeds/luci/luci-app-daed
-          rm -rf package/dae package/daed package/luci-app-daede
+          rm -rf package/dae package/daed package/luci-app-daede package/vmlinux-btf
           
-          # 安装 kenzok8 优化版
+          # 安装 kenzok8 优化版（含 vmlinux-btf 依赖包）
           git clone --depth 1 https://github.com/kenzok8/openwrt-daede.git /tmp/openwrt-daede
           cp -a /tmp/openwrt-daede/dae package/custom/dae
           cp -a /tmp/openwrt-daede/daed package/custom/daed
           cp -a /tmp/openwrt-daede/luci-app-daede package/custom/luci-app-daede
+          cp -a /tmp/openwrt-daede/vmlinux-btf package/custom/vmlinux-btf
           
           # 校验文件完整性
           test -f package/custom/dae/Makefile
           test -f package/custom/daed/Makefile
           test -f package/custom/luci-app-daede/Makefile
+          test -f package/custom/vmlinux-btf/Makefile
           echo "[ OK ] DAE -> package/custom/dae/Makefile"
           echo "[ OK ] DAED -> package/custom/daed/Makefile"
           echo "[ OK ] LUCI-DAEDE -> package/custom/luci-app-daede/Makefile"
+          echo "[ OK ] vmlinux-btf -> package/custom/vmlinux-btf/Makefile"
 
       # 9. 安装 Lucky 插件
       - name: Install Lucky
@@ -208,6 +211,7 @@ jobs:
           check_file "DAE" "package/custom/dae/Makefile"
           check_file "DAED" "package/custom/daed/Makefile"
           check_file "LUCI-DAEDE" "package/custom/luci-app-daede/Makefile"
+          check_file "vmlinux-btf" "package/custom/vmlinux-btf/Makefile"
           check_file "RTP2HTTPD" "package/custom/luci-app-rtp2httpd/Makefile"
           check_file "Lucky" "package/custom/lucky/luci-app-lucky/Makefile"
           check_file "OpenClash" "package/custom/luci-app-openclash/Makefile"
