@@ -96,6 +96,9 @@ jobs:
           
           ./scripts/feeds update -a 2>&1 | tee preflight/feeds-update.log
           
+          # 前置清理：从源中彻底移除 fchomo 相关包，避免后续被安装
+          rm -rf feeds/small/*fchomo* feeds/kenzo/*fchomo*
+          
           # 清理冲突与重复包
           rm -rf feeds/luci/applications/luci-app-mosdns
           rm -rf feeds/luci/applications/luci-app-dae
@@ -174,8 +177,8 @@ jobs:
           set -euo pipefail
           rm -rf package/feeds/kenzo/luci-app-dockerman
           rm -rf package/feeds/small/trojan package/feeds/small/trojan-plus
-          # 彻底清理 fchomo 相关文件
-          find package feeds -type d -name '*fchomo*' -prune -exec rm -rf {} + 2>/dev/null || true
+          # 兜底清理：彻底清除所有 fchomo 相关文件与目录（含临时信息文件）
+          find package feeds -iname '*fchomo*' -exec rm -rf {} + 2>/dev/null || true
           echo "[ OK ] Removed conflicting/problematic packages"
 
       # 12. 编译前静态校验
