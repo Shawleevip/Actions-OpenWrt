@@ -10,7 +10,7 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
     permissions:
       contents: write
-      actions: write
+    # actions: write
 
     name: ImmortalWrt 编译
     steps:
@@ -599,13 +599,7 @@ jobs:
 
           mkdir -p release
           DATE="$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)"
-
-          SRC="$(find bin/targets/x86/64 \
-            -maxdepth 1 \
-            -type f \
-            -name '*combined-efi.img.gz' \
-
-            | head -1)"
+          SRC="$(find bin/targets/x86/64 -maxdepth 1 -type f -name '*combined-efi.img.gz' | head -n 1)"
 
           if [ -z "$SRC" ]; then
             echo "ERROR: EFI image not found."
@@ -710,14 +704,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 24. 删除旧的 workflow 运行记录
-      - name: 删除旧的 workflow 运行记录
-        if: always()
-        uses: Mattraks/delete-workflow-runs@v2
-        continue-on-error: true
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 20
+      #- name: 删除旧的 workflow 运行记录
+      #  if: always()
+      #  uses: Mattraks/delete-workflow-runs@v2
+      #  continue-on-error: true
+      #  with:
+      #    token: ${{ github.token }}
+      #    repository: ${{ github.repository }}
+      #    retain_days: 20
 
       - name: 最终总结
         if: always()
