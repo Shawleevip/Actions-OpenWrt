@@ -129,7 +129,7 @@ jobs:
           rm -f .config .config.old
           touch .config
 
-          cat >> .config <<'EOF'
+          cat >> .config <<EOF
           # ============================================================
           # Target / Image / Build
           # ============================================================
