@@ -71,16 +71,12 @@ jobs:
         working-directory: ./openwrt
         run: |
           set -e
-
           rm -rf package/feeds/luci/luci-app-openclash package/openclash package/feeds/luci/openclash
           git clone --depth 1 https://github.com/vernesong/OpenClash.git package/openclash
-
           rm -rf package/feeds/luci/luci-app-passwall2 package/passwall2
           git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall2.git package/passwall2
-
           rm -rf package/dae package/feeds/base/dae
           git clone --depth 1 https://github.com/QiuSimons/luci-app-daed.git package/dae
-
           rm -rf package/feeds/lucky/luci-app-lucky package/lucky
           git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/lucky
 
@@ -88,7 +84,6 @@ jobs:
         working-directory: ./openwrt
         run: |
           set -e
-
           check_makefile() {
             NAME="$1"
             PATH_TO_MAKEFILE="$2"
@@ -100,13 +95,11 @@ jobs:
             }
             echo "OK: Makefile exists."
           }
-
           check_makefile "OpenClash" package/openclash/luci-app-openclash/Makefile
           check_makefile "PassWall2" package/passwall2/luci-app-passwall2/Makefile
           check_makefile "DAED" package/dae/luci-app-daed/Makefile
           check_makefile "Lucky" package/lucky/luci-app-lucky/Makefile
    
-
       - name: 自定义应用配置
         working-directory: ./openwrt
         run: |
@@ -370,9 +363,8 @@ jobs:
           TZ: Asia/Shanghai
         run: |
           set -o pipefail
-
           make download -j$(nproc)
-          make -j$(nproc) V=s 2>&1 | tee build.log || \
+          make -j$(nproc) 2>&1 | tee build.log || \
           (echo "Multi-thread build failed, retrying with single thread..." && \
           make -j1 V=s 2>&1 | tee -a build.log)
 
