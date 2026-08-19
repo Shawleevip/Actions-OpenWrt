@@ -361,7 +361,6 @@ jobs:
 
           grep -E '^CONFIG_(DEVEL|KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_CGROUPS|KERNEL_CGROUP_BPF|KERNEL_BPF_EVENTS|BPF_TOOLCHAIN_HOST|KERNEL_XDP_SOCKETS)=' .config || true
 
-          grep -n -E 'WARNING:|depends on|dependency|not found|unknown symbol|invalid' defconfig.log || true
 
       - name: 编译 ImmortalWrt
         working-directory: ./openwrt
@@ -370,6 +369,8 @@ jobs:
         run: |
           set -o pipefail
 
+          export TERM=xterm
+          make defconfig
           make download -j$(nproc)
           make -j$(nproc) 2>&1 | tee build.log || \
           (echo "Multi-thread build failed, retrying with single thread..." && \
@@ -429,7 +430,7 @@ jobs:
           path: |
             ./openwrt/.config
             ./openwrt/.config.requested
-            ./openwrt/defconfig.log
+            ./openwrt/build.log
             ./openwrt/build.log
             ./openwrt/release/buildinfo.txt
           if-no-files-found: warn
