@@ -343,24 +343,41 @@ jobs:
         working-directory: ./openwrt
         run: |
           set -e
-
           git log -1 --format='commit: %H'
           git log -1 --format='subject: %s'
-
           echo "Commit: ${ARGON_COMMIT}"
           echo "Version: ${ARGON_VERSION}"
-
           grep -E '^CONFIG_PACKAGE_(luci-app-upnp|miniupnpd-nftables|luci-i18n-upnp-zh-cn)=' .config || true
           echo "miniupnpd 提供 UPnP IGD、NAT-PMP 和 PCP 支持。"
-
           grep -E '^CONFIG_PACKAGE_(vlmcsd|luci-app-vlmcsd|luci-i18n-vlmcsd-zh-cn)=' .config || true
-
           grep -E '^CONFIG_PACKAGE_(luci-app-openvpn|openvpn-easy-rsa|luci-app-openvpn-server)=' .config || true
-
           grep -E '^CONFIG_PACKAGE_(kmod-wireguard|wireguard-tools|luci-proto-wireguard)=' .config || true
-
           grep -E '^CONFIG_(DEVEL|KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_CGROUPS|KERNEL_CGROUP_BPF|KERNEL_BPF_EVENTS|BPF_TOOLCHAIN_HOST|KERNEL_XDP_SOCKETS)=' .config || true
 
+      - name: 准备 Rust 源码并修复 CI LLVM
+        working-directory: ./openwrt
+        run: |
+          set -e
+          echo "===== 下载并准备 Rust host 源码 ====="
+          make package/feeds/packages/rust/host/download V=s -j1
+          RUST_BOOTSTRAP="$(find build_dir -type f -path '*/rustc-1.94.0-src/bootstrap.toml' | head -n 1)"
+          if [ -z "$RUST_BOOTSTRAP" ]; then
+            echo "ERROR: Rust 1.94.0 bootstrap.toml not found after Rust download stage."
+            find build_dir -type f -name bootstrap.toml -print | head -n 20 || true
+            exit 1
+          fi
+          echo "Rust bootstrap.toml: $RUST_BOOTSTRAP"
+          if grep -qE '^[[:space:]]*download-ci-llvm[[:space:]]*=' "$RUST_BOOTSTRAP"; then
+            sed -i -E 's/^[[:space:]]*download-ci-llvm[[:space:]]*=.*/download-ci-llvm = false/' "$RUST_BOOTSTRAP"
+          else
+            if grep -qE '^\[llvm\][[:space:]]*$' "$RUST_BOOTSTRAP"; then
+              sed -i '/^\[llvm\][[:space:]]*$/a download-ci-llvm = false' "$RUST_BOOTSTRAP"
+            else
+              printf '\n[llvm]\ndownload-ci-llvm = false\n' >> "$RUST_BOOTSTRAP"
+            fi
+          fi
+          echo "===== Rust LLVM configuration after fix ====="
+          grep -n -A3 -B2 'download-ci-llvm' "$RUST_BOOTSTRAP" || true
 
       - name: 编译 ImmortalWrt
         working-directory: ./openwrt
@@ -380,22 +397,17 @@ jobs:
         working-directory: ./openwrt
         run: |
           set -e
-
           mkdir -p release
           DATE="$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)"
           SRC="$(find bin/targets/x86/64 -maxdepth 1 -type f -name '*combined-efi.img.gz' | head -n 1)"
-
           if [ -z "$SRC" ]; then
             echo "ERROR: EFI image not found."
             find bin/targets/x86/64 -maxdepth 1 -type f -print
             exit 1
           fi
-
           FILE="ImmortalWrt-x86-64-Generic-${DATE}.img.gz"
-
           cp "$SRC" "release/$FILE"
           sha256sum "release/$FILE" > release/SHA256SUMS.txt
-
           cat > release/buildinfo.txt <<EOF
           ImmortalWrt branch: openwrt-25.12
           ImmortalWrt commit: ${SOURCE_COMMIT}
@@ -405,10 +417,8 @@ jobs:
           Build time: ${DATE} Asia/Shanghai
           Firmware file: ${FILE}
           EOF
-
           echo "RELEASE_TAG=ImmortalWrt-25.12-x86_64-${DATE}" >> "$GITHUB_ENV"
           echo "RELEASE_FILE=$FILE" >> "$GITHUB_ENV"
-
           ls -lh release/
 
       - name: 上传固件
@@ -444,14 +454,11 @@ jobs:
           name: ${{ env.RELEASE_TAG }}
           body: |
             ## ImmortalWrt 25.12 x86_64
-
             **固件：** `${{ env.RELEASE_FILE }}`
             **目标平台：** x86_64 Generic
             **固件格式：** EFI
             **编译时间：** 北京时间
-
             ### 主要组件
-
             - OpenClash
             - PassWall2
             - DAED
@@ -460,9 +467,7 @@ jobs:
             - SQM / CAKE
             - WireGuard
             - OpenVPN
-
             ### 源码
-
             **ImmortalWrt：** `openwrt-25.12`
             **ImmortalWrt commit：** `${{ env.SOURCE_COMMIT }}`
             > 本 Release 为 GitHub Actions 自动编译发布。
@@ -491,14 +496,11 @@ jobs:
         run: |
           echo "################################################################"
           echo "################################################################"
-
           git log -1 --format='commit: %H'
           git log -1 --format='subject: %s'
-
           echo "ImmortalWrt commit: ${SOURCE_COMMIT:-unknown}"
           echo "Argon commit: ${ARGON_COMMIT:-unknown}"
           echo "Argon version: ${ARGON_VERSION:-unknown}"
           echo "Release: ${RELEASE_TAG:-not-created}"
           echo "Image: ${RELEASE_FILE:-not-created}"
-
           echo "################################################################"
