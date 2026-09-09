@@ -13,6 +13,7 @@ jobs:
      # actions: write
 
     name: ImmortalWrt 编译
+    timeout-minutes: 300
     steps:
       # 1. 优化构建空间
       - name: 优化构建空间
@@ -58,8 +59,27 @@ jobs:
           git log -1 --format='commit: %H'
           git log -1 --format='subject: %s'
           echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: 检查源码是否有更新
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FIXED_TAG: ImmortalWrt-25.12-x86_64-latest
+        run: |
+          set +e
+          LAST_COMMIT="$(gh release view "$FIXED_TAG" --repo "${{ github.repository }}" --json body -q .body 2>/dev/null | grep -oE 'ImmortalWrt commit: [0-9a-f]+' | awk '{print $3}')"
+          set -e
+          echo "上次编译 commit: ${LAST_COMMIT:-<none>}"
+          echo "本次源码 commit: ${SOURCE_COMMIT}"
+          if [ -n "$LAST_COMMIT" ] && [ "$LAST_COMMIT" = "$SOURCE_COMMIT" ]; then
+            echo "SKIP_BUILD=true" >> "$GITHUB_ENV"
+            echo "源码无变化，跳过本次编译。"
+          else
+            echo "SKIP_BUILD=false" >> "$GITHUB_ENV"
+          fi
+
       # 5. 配置 feeds
       - name: 配置上游 feeds
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -67,6 +87,7 @@ jobs:
           cat feeds.conf.default
       # 6. 更新并安装官方 feeds
       - name: 更新并安装官方 feeds
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -74,6 +95,7 @@ jobs:
           ./scripts/feeds install -a
       # 7. 安装第三方软件包
       - name: 安装第三方软件包
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -87,6 +109,7 @@ jobs:
           git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/lucky
       # 8. 验证第三方源码
       - name: 验证第三方软件包源码
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -110,6 +133,7 @@ jobs:
           echo "============================================================"
       # 9. 自定义应用配置
       - name: 自定义应用配置
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -269,6 +293,7 @@ jobs:
           cp .config .config.requested
       # 10. 配置 ccache
       - name: 配置 ccache
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -279,6 +304,7 @@ jobs:
           ccache -s
       # 11. 恢复下载缓存
       - name: 恢复下载缓存
+        if: env.SKIP_BUILD != 'true'
         uses: actions/cache/restore@v4
         id: cache-dl
         with:
@@ -289,6 +315,7 @@ jobs:
             ${{ runner.os }}-immortalwrt-dl-
       # 12. 恢复 ccache 缓存
       - name: 恢复 ccache 缓存
+        if: env.SKIP_BUILD != 'true'
         uses: actions/cache/restore@v4
         id: cache-ccache
         with:
@@ -298,24 +325,27 @@ jobs:
             ${{ runner.os }}-immortalwrt-ccache-
       # 13. 恢复工具链缓存
       - name: 恢复工具链缓存
+        if: env.SKIP_BUILD != 'true'
         uses: actions/cache/restore@v4
         id: cache-staging
         with:
           path: |
             ./openwrt/staging_dir/host
             ./openwrt/staging_dir/toolchain-*
-          key: ${{ runner.os }}-immortalwrt-staging-v4-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
+          key: ${{ runner.os }}-immortalwrt-staging-v4-${{ hashFiles('openwrt/.config') }}
           restore-keys: |
             ${{ runner.os }}-immortalwrt-staging-v4-
             ${{ runner.os }}-immortalwrt-staging-
       # 14. 运行 make defconfig
       - name: 运行 make defconfig
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -o pipefail
           make defconfig 2>&1 | tee defconfig.log
       # 15. 验证配置
       - name: 验证配置
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -399,6 +429,7 @@ jobs:
           echo "============================================================"
       # 16. 审计重要组件
       - name: 审计重要组件
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -430,6 +461,7 @@ jobs:
           grep -n -E 'WARNING:|depends on|dependency|not found|unknown symbol|invalid' defconfig.log || true
       # 17. 编译固件
       - name: 编译 ImmortalWrt
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         env:
           TZ: Asia/Shanghai
@@ -445,40 +477,81 @@ jobs:
           echo "============================================================"
           ccache -s || true
           echo "============================================================"
+          echo "编译前磁盘空间"
+          echo "============================================================"
+          df -h .
+
+          # [优化A] 下载阶段增加重试：上游/镜像服务器偶发超时或连接重置，
+          # make download 是幂等操作，重试成本很低；不重试的话一次网络抽风
+          # 就会让前面攒的 ccache、工具链缓存全部白费，只能等下一次定时任务。
+          echo "============================================================"
+          echo "下载依赖源码包"
+          echo "============================================================"
+          DOWNLOAD_OK=0
+          for i in 1 2 3; do
+            if make -j"$(nproc)" download; then
+              DOWNLOAD_OK=1
+              break
+            fi
+            echo "下载失败，第 ${i} 次重试（等待 10s）..."
+            sleep 10
+          done
+          if [ "$DOWNLOAD_OK" -ne 1 ]; then
+            echo "ERROR: 下载依赖重试 3 次后仍失败"
+            exit 1
+          fi
+          # 清理掉体积异常小（<1KB）的下载文件，避免下载中断留下的残包被当成完整包使用
+          find dl -type f -size -1024c -print -delete || true
+
+          # [优化B] 正常编译不再全程开启 V=s：world 阶段命令输出量级是几十万行，
+          # 平时用不到却拖慢 IO、占日志存储。失败时不重跑，直接打印 build.log
+          # 尾部内容——大多数编译错误都会在最后几十到几百行里体现。
+          echo "============================================================"
           echo "开始编译 IMMORTALWRT"
           echo "============================================================"
-          make -j"$(nproc)" download
-          make -j"$(nproc)" world V=s 2>&1 | tee build.log
+          if ! make -j"$(nproc)" world 2>&1 | tee build.log; then
+            echo "============================================================"
+            echo "编译失败，build.log 末尾 300 行："
+            echo "============================================================"
+            tail -n 300 build.log
+            exit 1
+          fi
+
           echo
           echo "============================================================"
           echo "编译后 CCACHE 状态"
           echo "============================================================"
           ccache -s || true
+          echo "============================================================"
+          echo "编译后磁盘空间"
+          echo "============================================================"
+          df -h .
       # 18. 保存下载缓存
       - name: 保存下载缓存
-        if: success() && steps.cache-dl.outputs.cache-hit != 'true'
+        if: env.SKIP_BUILD != 'true' && success() && steps.cache-dl.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ./openwrt/dl
           key: ${{ runner.os }}-immortalwrt-dl-v4-${{ env.SOURCE_COMMIT }}
       # 19. 保存 ccache 缓存
       - name: 保存 ccache 缓存
-        if: success() && steps.cache-ccache.outputs.cache-hit != 'true'
+        if: env.SKIP_BUILD != 'true' && success() && steps.cache-ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ./openwrt/.ccache
           key: ${{ runner.os }}-immortalwrt-ccache-v4
       # 20. 保存工具链缓存
       - name: 保存工具链缓存
-        if: success() && steps.cache-staging.outputs.cache-hit != 'true'
+        if: env.SKIP_BUILD != 'true' && success() && steps.cache-staging.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
             ./openwrt/staging_dir/host
             ./openwrt/staging_dir/toolchain-*
-          key: ${{ runner.os }}-immortalwrt-staging-v4-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
+          key: ${{ runner.os }}-immortalwrt-staging-v4-${{ hashFiles('openwrt/.config') }}
       # 21. 收集 EFI 镜像和校验和
       - name: 收集发布文件
+        if: env.SKIP_BUILD != 'true'
         working-directory: ./openwrt
         run: |
           set -e
@@ -502,14 +575,18 @@ jobs:
           Build time: ${DATE} Asia/Shanghai
           Firmware file: ${FILE}
           EOF
-          echo "RELEASE_TAG=ImmortalWrt-25.12-x86_64-${DATE}" >> "$GITHUB_ENV"
+          # [优化2] RELEASE_TAG 改为固定值（见下方创建 Release 步骤），
+          # 这里不再用日期生成 tag，避免 tag/Release 数量无限增长。
+          echo "RELEASE_TAG=ImmortalWrt-25.12-x86_64-latest" >> "$GITHUB_ENV"
           echo "RELEASE_FILE=$FILE" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$DATE" >> "$GITHUB_ENV"
           echo "============================================================"
           echo "发布文件列表"
           echo "============================================================"
           ls -lh release/
       # 22. 上传固件和诊断信息
       - name: 上传固件
+        if: env.SKIP_BUILD != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ImmortalWrt-x86-64-${{ github.run_number }}
@@ -521,7 +598,7 @@ jobs:
           retention-days: 14
 
       - name: 上传诊断信息
-        if: always()
+        if: always() && env.SKIP_BUILD != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ImmortalWrt-diagnostics-${{ github.run_number }}
@@ -534,19 +611,19 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      # 23. 创建 GitHub Release
+      # 23. 创建 / 更新 GitHub Release  
       - name: 创建 GitHub Release
-        if: success()
+        if: env.SKIP_BUILD != 'true' && success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_TAG }}
+          name: ImmortalWrt 25.12 x86_64 (${{ env.BUILD_DATE }})
           body: |
             ## ImmortalWrt 25.12 x86_64
             **固件：** `${{ env.RELEASE_FILE }}`
             **目标平台：** x86_64 Generic
             **固件格式：** EFI
-            **编译时间：** 北京时间
+            **编译时间：** ${{ env.BUILD_DATE }} 北京时间
             ### 主要组件
             - OpenClash
             - PassWall2
@@ -559,13 +636,14 @@ jobs:
             ### 源码
             **ImmortalWrt：** `openwrt-25.12`
             **ImmortalWrt commit：** `${{ env.SOURCE_COMMIT }}`
-            > 本 Release 为 GitHub Actions 自动编译发布。
+            > 本 Release 为 GitHub Actions 自动编译发布，固定 tag 滚动更新，不保留历史版本。
           files: |
             ./openwrt/release/${{ env.RELEASE_FILE }}
             ./openwrt/release/SHA256SUMS.txt
             ./openwrt/release/buildinfo.txt
           draft: false
           prerelease: false
+          make_latest: true
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -587,6 +665,9 @@ jobs:
           echo "################################################################"
           echo "# IMMORTALWRT 编译已完成"
           echo "################################################################"
+          if [ "${SKIP_BUILD:-false}" = "true" ]; then
+            echo "本次跳过编译：源码无变化。"
+          fi
           git log -1 --format='commit: %H'
           git log -1 --format='subject: %s'
           echo "ImmortalWrt commit: ${SOURCE_COMMIT:-unknown}"
