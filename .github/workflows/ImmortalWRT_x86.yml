@@ -111,30 +111,6 @@ jobs:
           }
           EOF
 
-      - name: 验证第三方软件包
-        working-directory: ./openwrt
-        run: |
-          set -e
-          for file in \
-            package/openclash/luci-app-openclash/Makefile \
-            package/passwall2/luci-app-passwall2/Makefile \
-            package/dae/luci-app-daed/Makefile \
-            package/lucky/luci-app-lucky/Makefile \
-            package/luci-app-timecontrol/Makefile
-          do
-            test -f "$file" || { echo "ERROR: $file"; exit 1; }
-          done
-
-          MENU=package/luci-app-timecontrol/root/usr/share/luci/menu.d/luci-app-timecontrol.json
-          test -f "$MENU"
-          grep -q '"admin/services/timecontrol"' "$MENU"
-
-          TIMECONTROL_VERSION=$(grep '^PKG_VERSION:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
-          TIMECONTROL_RELEASE=$(grep '^PKG_RELEASE:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
-          echo "TIMECONTROL_VERSION=$TIMECONTROL_VERSION" >> "$GITHUB_ENV"
-          echo "TIMECONTROL_RELEASE=$TIMECONTROL_RELEASE" >> "$GITHUB_ENV"
-          echo "TimeControl: ${TIMECONTROL_VERSION:-unknown}-${TIMECONTROL_RELEASE:-unknown}"
-
       - name: 自定义配置
         working-directory: ./openwrt
         run: |
@@ -266,20 +242,6 @@ jobs:
 
           cp .config .config.requested
 
-      - name: 配置 ccache
-        working-directory: ./openwrt
-        run: |
-          mkdir -p .ccache
-          export CCACHE_DIR="$PWD/.ccache"
-          ccache --set-config=max_size=5G
-          ccache --set-config=compression=true
-
-      - name: 运行 make defconfig
-        working-directory: ./openwrt
-        run: |
-          set -o pipefail
-          make defconfig 2>&1 | tee defconfig.log
-
       - name: 恢复DL缓存
         uses: actions/cache/restore@v4
         id: cache-dl
@@ -311,6 +273,44 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-immortalwrt-staging-v7-25.12-
             ${{ runner.os }}-immortalwrt-staging-
+
+      - name: 配置 ccache
+        working-directory: ./openwrt
+        run: |
+          mkdir -p .ccache
+          export CCACHE_DIR="$PWD/.ccache"
+          ccache --set-config=max_size=5G
+          ccache --set-config=compression=true
+
+      - name: 运行 make defconfig
+        working-directory: ./openwrt
+        run: |
+          set -o pipefail
+          make defconfig 2>&1 | tee defconfig.log
+
+      - name: 验证第三方软件包
+        working-directory: ./openwrt
+        run: |
+          set -e
+          for file in \
+            package/openclash/luci-app-openclash/Makefile \
+            package/passwall2/luci-app-passwall2/Makefile \
+            package/dae/luci-app-daed/Makefile \
+            package/lucky/luci-app-lucky/Makefile \
+            package/luci-app-timecontrol/Makefile
+          do
+            test -f "$file" || { echo "ERROR: $file"; exit 1; }
+          done
+
+          MENU=package/luci-app-timecontrol/root/usr/share/luci/menu.d/luci-app-timecontrol.json
+          test -f "$MENU"
+          grep -q '"admin/services/timecontrol"' "$MENU"
+
+          TIMECONTROL_VERSION=$(grep '^PKG_VERSION:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
+          TIMECONTROL_RELEASE=$(grep '^PKG_RELEASE:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
+          echo "TIMECONTROL_VERSION=$TIMECONTROL_VERSION" >> "$GITHUB_ENV"
+          echo "TIMECONTROL_RELEASE=$TIMECONTROL_RELEASE" >> "$GITHUB_ENV"
+          echo "TimeControl: ${TIMECONTROL_VERSION:-unknown}-${TIMECONTROL_RELEASE:-unknown}"
 
       - name: 验证配置
         working-directory: ./openwrt
@@ -392,17 +392,23 @@ jobs:
           if [ "$DOWNLOAD_OK" -ne 1 ]; then
             echo "ERROR: 下载依赖重试 3 次后仍失败"
             exit 1
+          fi
           find dl -type f \( \
             -name '*.tmp' -o -name '*.part' -o -name '*.partial' \
           \) -print -delete || true
           echo "============================================================"
           echo "开始编译 IMMORTALWRT"
           echo "============================================================"
-          if ! make -j"$(nproc)" world 2>&1 | tee build.log; then
-            tail -n 300 build.log
+          BUILD_LOG=/tmp/immortalwrt-build.log
+          if ! make -j"$(nproc)" world 2>&1 | tee "$BUILD_LOG"; then
+            echo "============================================================"
+            echo "编译失败，build.log 末尾 300 行："
+            echo "============================================================"
+            tail -n 300 "$BUILD_LOG"
+            cp "$BUILD_LOG" ./build.log 2>/dev/null || true
             exit 1
           fi
-
+          cp "$BUILD_LOG" ./build.log 2>/dev/null || true
           ccache -s || true
           df -h .
 
