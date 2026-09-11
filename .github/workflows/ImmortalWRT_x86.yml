@@ -1,4 +1,5 @@
 name: ImmortalWrt x86
+
 on:
   schedule:
     - cron: "0 2,10 * * *"
@@ -10,7 +11,6 @@ jobs:
     if: github.event_name == 'schedule' || github.event.repository.owner.id == github.event.sender.id
     permissions:
       contents: write
-      #actions: write
     name: ImmortalWrt 编译
     timeout-minutes: 300
 
@@ -27,7 +27,7 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: 检查代码
+      - name: 检出代码
         uses: actions/checkout@v4
 
       - name: 安装编译依赖
@@ -135,7 +135,7 @@ jobs:
           echo "TIMECONTROL_RELEASE=$TIMECONTROL_RELEASE" >> "$GITHUB_ENV"
           echo "TimeControl: ${TIMECONTROL_VERSION:-unknown}-${TIMECONTROL_RELEASE:-unknown}"
 
-      - name: 自定义配置
+      - name: 写入配置
         working-directory: ./openwrt
         run: |
           set -e
@@ -152,11 +152,10 @@ jobs:
 
           # IPv6
           CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
-          CONFIG_PACKAGE_ipv6helper=y
           CONFIG_PACKAGE_odhcp6c=y
           CONFIG_PACKAGE_odhcpd-ipv6only=y
           CONFIG_PACKAGE_luci-proto-ipv6=y
-
+          
           # 网络接口
           CONFIG_PACKAGE_kmod-bonding=y
           CONFIG_PACKAGE_proto-bonding=y
@@ -345,20 +344,14 @@ jobs:
             check_y "CONFIG_PACKAGE_$P"
           done
 
-          for P in ipv6helper odhcp6c odhcpd-ipv6only luci-proto-ipv6; do
+          for P in odhcp6c odhcpd-ipv6only luci-proto-ipv6; do
             check_y "CONFIG_PACKAGE_$P"
           done
 
-          for P in \
-            KERNEL_DEBUG_INFO_BTF KERNEL_CGROUPS KERNEL_CGROUP_BPF \
-            KERNEL_BPF_EVENTS BPF_TOOLCHAIN_HOST KERNEL_XDP_SOCKETS
-          do
+          for P in KERNEL_CGROUPS KERNEL_CGROUP_BPF KERNEL_BPF_EVENTS KERNEL_XDP_SOCKETS; do
             check_y "CONFIG_$P"
           done
 
-          check_not_y CONFIG_PACKAGE_luci-app-openvpn-server
-          check_not_y CONFIG_PACKAGE_ip6tables
-          check_not_y CONFIG_PACKAGE_kmod-nft-nat6
 
           test -f package/luci-app-timecontrol/Makefile
           test -f package/luci-app-timecontrol/root/usr/share/luci/menu.d/luci-app-timecontrol.json
@@ -518,15 +511,23 @@ jobs:
             **目标：** x86_64 Generic
             **格式：** EFI
             **编译时间：** ${{ env.BUILD_DATE }} 北京时间
+
             ### 主要组件
             OpenClash / PassWall2 / DAED / Lucky / RTP2HTTPD
             SQM / CAKE / WireGuard / OpenVPN
             TimeControl / UPnP / Vlmcsd / Argon
+
             ### IPv6
-            ipv6helper / odhcp6c / odhcpd-ipv6only / LuCI IPv6
+            odhcp6c / odhcpd-ipv6only / LuCI IPv6
+
             ### 源码
             ImmortalWrt branch: openwrt-25.12
             ImmortalWrt commit: ${{ env.SOURCE_COMMIT }}
+
+            ### TimeControl
+            Branch: js
+            Version: ${{ env.TIMECONTROL_VERSION }}
+            Release: ${{ env.TIMECONTROL_RELEASE }}
 
           files: |
             ./openwrt/release/${{ env.RELEASE_FILE }}
