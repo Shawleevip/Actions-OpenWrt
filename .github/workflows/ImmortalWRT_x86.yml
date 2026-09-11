@@ -377,7 +377,9 @@ jobs:
           mkdir -p "$CCACHE_DIR"
           ccache --set-config=max_size=5G
           ccache --set-config=compression=true
-
+          echo "============================================================"
+          echo "下载依赖源码包"
+          echo "============================================================"
           DOWNLOAD_OK=0
           for i in 1 2 3; do
             if make -j"$(nproc)" download; then
@@ -387,13 +389,15 @@ jobs:
             echo "下载失败，第 $i 次重试，等待 10 秒..."
             sleep 10
           done
-
-          [ "$DOWNLOAD_OK" -eq 1 ] || exit 1
-
+          if [ "$DOWNLOAD_OK" -ne 1 ]; then
+            echo "ERROR: 下载依赖重试 3 次后仍失败"
+            exit 1
           find dl -type f \( \
             -name '*.tmp' -o -name '*.part' -o -name '*.partial' \
           \) -print -delete || true
-
+          echo "============================================================"
+          echo "开始编译 IMMORTALWRT"
+          echo "============================================================"
           if ! make -j"$(nproc)" world 2>&1 | tee build.log; then
             tail -n 300 build.log
             exit 1
