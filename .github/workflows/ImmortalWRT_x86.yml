@@ -18,7 +18,7 @@ jobs:
       - name: 优化空间
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 4096
+          root-reserve-mb: 2048
           temp-reserve-mb: 1024
           swap-size-mb: 8192
           remove-dotnet: 'true'
@@ -110,6 +110,30 @@ jobs:
               }
           }
           EOF
+
+      - name: 验证第三方软件包
+        working-directory: ./openwrt
+        run: |
+          set -e
+          for file in \
+            package/openclash/luci-app-openclash/Makefile \
+            package/passwall2/luci-app-passwall2/Makefile \
+            package/dae/luci-app-daed/Makefile \
+            package/lucky/luci-app-lucky/Makefile \
+            package/luci-app-timecontrol/Makefile
+          do
+            test -f "$file" || { echo "ERROR: $file"; exit 1; }
+          done
+
+          MENU=package/luci-app-timecontrol/root/usr/share/luci/menu.d/luci-app-timecontrol.json
+          test -f "$MENU"
+          grep -q '"admin/services/timecontrol"' "$MENU"
+
+          TIMECONTROL_VERSION=$(grep '^PKG_VERSION:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
+          TIMECONTROL_RELEASE=$(grep '^PKG_RELEASE:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
+          echo "TIMECONTROL_VERSION=$TIMECONTROL_VERSION" >> "$GITHUB_ENV"
+          echo "TIMECONTROL_RELEASE=$TIMECONTROL_RELEASE" >> "$GITHUB_ENV"
+          echo "TimeControl: ${TIMECONTROL_VERSION:-unknown}-${TIMECONTROL_RELEASE:-unknown}"
 
       - name: 自定义配置
         working-directory: ./openwrt
@@ -247,9 +271,9 @@ jobs:
         id: cache-dl
         with:
           path: ./openwrt/dl
-          key: ${{ runner.os }}-immortalwrt-dl-v7-25.12
+          key: ${{ runner.os }}-immortalwrt-dl-v8-25.12
           restore-keys: |
-            ${{ runner.os }}-immortalwrt-dl-v7-25.12
+            ${{ runner.os }}-immortalwrt-dl-v8-25.12
             ${{ runner.os }}-immortalwrt-dl-
 
       - name: 恢复 ccache
@@ -257,9 +281,9 @@ jobs:
         id: cache-ccache
         with:
           path: ./openwrt/.ccache
-          key: ${{ runner.os }}-immortalwrt-ccache-v7-25.12
+          key: ${{ runner.os }}-immortalwrt-ccache-v8-25.12
           restore-keys: |
-            ${{ runner.os }}-immortalwrt-ccache-v7-25.12
+            ${{ runner.os }}-immortalwrt-ccache-v8-25.12
             ${{ runner.os }}-immortalwrt-ccache-
 
       - name: 恢复工具链缓存
@@ -269,14 +293,15 @@ jobs:
           path: |
             ./openwrt/staging_dir/host
             ./openwrt/staging_dir/toolchain-*
-          key: ${{ runner.os }}-immortalwrt-staging-v7-25.12-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
+          key: ${{ runner.os }}-immortalwrt-staging-v8-25.12-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
           restore-keys: |
-            ${{ runner.os }}-immortalwrt-staging-v7-25.12-
+            ${{ runner.os }}-immortalwrt-staging-v8-25.12-
             ${{ runner.os }}-immortalwrt-staging-
 
       - name: 配置 ccache
         working-directory: ./openwrt
         run: |
+          set -e
           mkdir -p .ccache
           export CCACHE_DIR="$PWD/.ccache"
           ccache --set-config=max_size=5G
@@ -287,30 +312,6 @@ jobs:
         run: |
           set -o pipefail
           make defconfig 2>&1 | tee defconfig.log
-
-      - name: 验证第三方软件包
-        working-directory: ./openwrt
-        run: |
-          set -e
-          for file in \
-            package/openclash/luci-app-openclash/Makefile \
-            package/passwall2/luci-app-passwall2/Makefile \
-            package/dae/luci-app-daed/Makefile \
-            package/lucky/luci-app-lucky/Makefile \
-            package/luci-app-timecontrol/Makefile
-          do
-            test -f "$file" || { echo "ERROR: $file"; exit 1; }
-          done
-
-          MENU=package/luci-app-timecontrol/root/usr/share/luci/menu.d/luci-app-timecontrol.json
-          test -f "$MENU"
-          grep -q '"admin/services/timecontrol"' "$MENU"
-
-          TIMECONTROL_VERSION=$(grep '^PKG_VERSION:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
-          TIMECONTROL_RELEASE=$(grep '^PKG_RELEASE:=' package/luci-app-timecontrol/Makefile | cut -d= -f2)
-          echo "TIMECONTROL_VERSION=$TIMECONTROL_VERSION" >> "$GITHUB_ENV"
-          echo "TIMECONTROL_RELEASE=$TIMECONTROL_RELEASE" >> "$GITHUB_ENV"
-          echo "TimeControl: ${TIMECONTROL_VERSION:-unknown}-${TIMECONTROL_RELEASE:-unknown}"
 
       - name: 验证配置
         working-directory: ./openwrt
@@ -417,14 +418,14 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ./openwrt/dl
-          key: ${{ runner.os }}-immortalwrt-dl-v7-25.12
+          key: ${{ runner.os }}-immortalwrt-dl-v8-25.12
 
       - name: 保存 ccache
         if: success() && steps.cache-ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ./openwrt/.ccache
-          key: ${{ runner.os }}-immortalwrt-ccache-v7-25.12
+          key: ${{ runner.os }}-immortalwrt-ccache-v8-25.12
 
       - name: 保存工具链缓存
         if: success() && steps.cache-staging.outputs.cache-hit != 'true'
@@ -433,7 +434,7 @@ jobs:
           path: |
             ./openwrt/staging_dir/host
             ./openwrt/staging_dir/toolchain-*
-          key: ${{ runner.os }}-immortalwrt-staging-v7-25.12-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
+          key: ${{ runner.os }}-immortalwrt-staging-v8-25.12-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
 
       - name: 发布固件
         working-directory: ./openwrt
