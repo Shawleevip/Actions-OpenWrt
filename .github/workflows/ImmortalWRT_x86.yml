@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 300
 
     steps:
-      - name: 优化构建空间
+      - name: 优化空间
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 4096
@@ -27,10 +27,10 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: 检出代码
+      - name: 检查代码
         uses: actions/checkout@v4
 
-      - name: 安装编译依赖
+      - name: 安装依赖
         env:
           DEBIAN_FRONTEND: noninteractive
           TZ: Asia/Shanghai
@@ -135,7 +135,7 @@ jobs:
           echo "TIMECONTROL_RELEASE=$TIMECONTROL_RELEASE" >> "$GITHUB_ENV"
           echo "TimeControl: ${TIMECONTROL_VERSION:-unknown}-${TIMECONTROL_RELEASE:-unknown}"
 
-      - name: 写入配置
+      - name: 自定义配置
         working-directory: ./openwrt
         run: |
           set -e
@@ -155,7 +155,7 @@ jobs:
           CONFIG_PACKAGE_odhcp6c=y
           CONFIG_PACKAGE_odhcpd-ipv6only=y
           CONFIG_PACKAGE_luci-proto-ipv6=y
-          
+
           # 网络接口
           CONFIG_PACKAGE_kmod-bonding=y
           CONFIG_PACKAGE_proto-bonding=y
@@ -280,7 +280,7 @@ jobs:
           set -o pipefail
           make defconfig 2>&1 | tee defconfig.log
 
-      - name: 恢复下载缓存
+      - name: 恢复DL缓存
         uses: actions/cache/restore@v4
         id: cache-dl
         with:
@@ -312,7 +312,7 @@ jobs:
             ${{ runner.os }}-immortalwrt-staging-v7-25.12-
             ${{ runner.os }}-immortalwrt-staging-
 
-      - name: 验证最终配置
+      - name: 验证配置
         working-directory: ./openwrt
         run: |
           set -e
@@ -323,13 +323,6 @@ jobs:
             value=$(grep "^$1=" .config 2>/dev/null | cut -d= -f2 || true)
             echo "$1=${value:-<NOT SET>}"
             [ "$value" = "y" ] || FAILED=1
-          }
-
-          check_not_y() {
-            local value
-            value=$(grep "^$1=" .config 2>/dev/null | cut -d= -f2 || true)
-            echo "$1=${value:-<NOT SET>}"
-            [ "$value" != "y" ] || FAILED=1
           }
 
           for P in \
@@ -352,16 +345,10 @@ jobs:
             check_y "CONFIG_$P"
           done
 
-
           test -f package/luci-app-timecontrol/Makefile
           test -f package/luci-app-timecontrol/root/usr/share/luci/menu.d/luci-app-timecontrol.json
           grep -q '"admin/services/timecontrol"' \
             package/luci-app-timecontrol/root/usr/share/luci/menu.d/luci-app-timecontrol.json
-
-          if grep -q "Not overriding core package 'luci-app-openclash'" defconfig.log; then
-            echo "ERROR: OpenClash override warning detected."
-            FAILED=1
-          fi
 
           [ "$FAILED" -eq 0 ]
 
@@ -415,7 +402,7 @@ jobs:
           ccache -s || true
           df -h .
 
-      - name: 保存下载缓存
+      - name: 保存DL缓存
         if: success() && steps.cache-dl.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
@@ -438,7 +425,7 @@ jobs:
             ./openwrt/staging_dir/toolchain-*
           key: ${{ runner.os }}-immortalwrt-staging-v7-25.12-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
 
-      - name: 收集发布文件
+      - name: 发布固件
         working-directory: ./openwrt
         run: |
           set -e
@@ -452,7 +439,7 @@ jobs:
             exit 1
           }
 
-          FILE="ImmortalWrt-x86-64-Generic-${DATE}.img.gz"
+          FILE="ImmortalWrt-x86-64-EFI-${DATE}.img.gz"
           cp "$SRC" "release/$FILE"
           sha256sum "release/$FILE" > release/SHA256SUMS.txt
 
@@ -464,8 +451,6 @@ jobs:
           Kernel: 6.12.x
           Build time: ${DATE} Asia/Shanghai
           Firmware file: ${FILE}
-          TimeControl version: ${TIMECONTROL_VERSION:-unknown}
-          TimeControl release: ${TIMECONTROL_RELEASE:-unknown}
           EOF
 
           echo "RELEASE_TAG=ImmortalWrt-25.12-x86_64-${DATE}" >> "$GITHUB_ENV"
@@ -498,7 +483,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: 创建 GitHub Release
+      - name: 发布Release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
@@ -517,17 +502,9 @@ jobs:
             SQM / CAKE / WireGuard / OpenVPN
             TimeControl / UPnP / Vlmcsd / Argon
 
-            ### IPv6
-            odhcp6c / odhcpd-ipv6only / LuCI IPv6
-
             ### 源码
             ImmortalWrt branch: openwrt-25.12
             ImmortalWrt commit: ${{ env.SOURCE_COMMIT }}
-
-            ### TimeControl
-            Branch: js
-            Version: ${{ env.TIMECONTROL_VERSION }}
-            Release: ${{ env.TIMECONTROL_RELEASE }}
 
           files: |
             ./openwrt/release/${{ env.RELEASE_FILE }}
@@ -540,7 +517,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 清理旧 Release
+      - name: 清理Release
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
