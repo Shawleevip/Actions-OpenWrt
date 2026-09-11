@@ -28,7 +28,7 @@ jobs:
           remove-docker-images: 'true'
 
       - name: 检查代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安装依赖
         env:
@@ -267,7 +267,7 @@ jobs:
           cp .config .config.requested
 
       - name: 恢复DL缓存
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         id: cache-dl
         with:
           path: ./openwrt/dl
@@ -277,7 +277,7 @@ jobs:
             ${{ runner.os }}-immortalwrt-dl-
 
       - name: 恢复 ccache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         id: cache-ccache
         with:
           path: ./openwrt/.ccache
@@ -285,18 +285,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-immortalwrt-ccache-v8-25.12
             ${{ runner.os }}-immortalwrt-ccache-
-
-      - name: 恢复工具链缓存
-        uses: actions/cache/restore@v4
-        id: cache-staging
-        with:
-          path: |
-            ./openwrt/staging_dir/host
-            ./openwrt/staging_dir/toolchain-*
-          key: ${{ runner.os }}-immortalwrt-staging-v8-25.12-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
-          restore-keys: |
-            ${{ runner.os }}-immortalwrt-staging-v8-25.12-
-            ${{ runner.os }}-immortalwrt-staging-
 
       - name: 配置 ccache
         working-directory: ./openwrt
@@ -415,26 +403,17 @@ jobs:
 
       - name: 保存DL缓存
         if: success() && steps.cache-dl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ./openwrt/dl
           key: ${{ runner.os }}-immortalwrt-dl-v8-25.12
 
       - name: 保存 ccache
         if: success() && steps.cache-ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ./openwrt/.ccache
           key: ${{ runner.os }}-immortalwrt-ccache-v8-25.12
-
-      - name: 保存工具链缓存
-        if: success() && steps.cache-staging.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ./openwrt/staging_dir/host
-            ./openwrt/staging_dir/toolchain-*
-          key: ${{ runner.os }}-immortalwrt-staging-v8-25.12-${{ env.SOURCE_COMMIT }}-${{ hashFiles('openwrt/.config') }}
 
       - name: 发布固件
         working-directory: ./openwrt
@@ -470,7 +449,7 @@ jobs:
           ls -lh release/
 
       - name: 上传固件
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ImmortalWrt-x86-64-${{ github.run_number }}
           path: |
@@ -482,7 +461,7 @@ jobs:
 
       - name: 上传诊断信息
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ImmortalWrt-diagnostics-${{ github.run_number }}
           path: |
