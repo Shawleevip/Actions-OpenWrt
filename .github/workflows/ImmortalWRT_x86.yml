@@ -19,8 +19,8 @@ jobs:
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 2048
-          temp-reserve-mb: 1024
-          swap-size-mb: 8192
+          temp-reserve-mb: 512
+          swap-size-mb: 4096
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
@@ -288,10 +288,11 @@ jobs:
 
       - name: 配置 ccache
         working-directory: ./openwrt
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
         run: |
           set -e
-          mkdir -p .ccache
-          export CCACHE_DIR="$PWD/.ccache"
+          mkdir -p "$CCACHE_DIR"
           ccache --set-config=max_size=5G
           ccache --set-config=compression=true
 
