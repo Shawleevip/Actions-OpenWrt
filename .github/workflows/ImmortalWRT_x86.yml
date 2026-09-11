@@ -18,9 +18,9 @@ jobs:
       - name: 优化空间
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 2048
-          temp-reserve-mb: 512
-          swap-size-mb: 4096
+          root-reserve-mb: 1024
+          temp-reserve-mb: 256
+          swap-size-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
@@ -271,20 +271,18 @@ jobs:
         id: cache-dl
         with:
           path: ./openwrt/dl
-          key: ${{ runner.os }}-immortalwrt-dl-v8-25.12
+          key: ${{ runner.os }}-immortalwrt-dl-v9-25.12
           restore-keys: |
-            ${{ runner.os }}-immortalwrt-dl-v8-25.12
-            ${{ runner.os }}-immortalwrt-dl-
+            ${{ runner.os }}-immortalwrt-dl-v9-25.12
 
       - name: 恢复 ccache
         uses: actions/cache/restore@v5
         id: cache-ccache
         with:
           path: ./openwrt/.ccache
-          key: ${{ runner.os }}-immortalwrt-ccache-v8-25.12
+          key: ${{ runner.os }}-immortalwrt-ccache-v9-25.12
           restore-keys: |
-            ${{ runner.os }}-immortalwrt-ccache-v8-25.12
-            ${{ runner.os }}-immortalwrt-ccache-
+            ${{ runner.os }}-immortalwrt-ccache-v9-25.12
 
       - name: 配置 ccache
         working-directory: ./openwrt
@@ -407,14 +405,14 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ./openwrt/dl
-          key: ${{ runner.os }}-immortalwrt-dl-v8-25.12
+          key: ${{ runner.os }}-immortalwrt-dl-v9-25.12
 
       - name: 保存 ccache
         if: success() && steps.cache-ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ./openwrt/.ccache
-          key: ${{ runner.os }}-immortalwrt-ccache-v8-25.12
+          key: ${{ runner.os }}-immortalwrt-ccache-v9-25.12
 
       - name: 发布固件
         working-directory: ./openwrt
