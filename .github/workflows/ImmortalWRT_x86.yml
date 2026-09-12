@@ -288,6 +288,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-immortalwrt-ccache-v9-25.12
 
+      - name: 恢复工具链缓存
+        uses: actions/cache/restore@v5
+        id: cache-toolchain
+        with:
+          path: |
+            ./openwrt/staging_dir/host
+            ./openwrt/staging_dir/hostpkg
+            ./openwrt/staging_dir/toolchain-x86_64_gcc-*
+          key: ${{ runner.os }}-immortalwrt-toolchain-v9-25.12-x86_64
+          restore-keys: |
+            ${{ runner.os }}-immortalwrt-toolchain-v9-
+
       - name: 配置 ccache
         working-directory: ./openwrt
         env:
@@ -417,6 +429,16 @@ jobs:
         with:
           path: ./openwrt/.ccache
           key: ${{ runner.os }}-immortalwrt-ccache-v9-25.12
+
+      - name: 保存工具链缓存
+        if: success() && steps.cache-toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ./openwrt/staging_dir/host
+            ./openwrt/staging_dir/hostpkg
+            ./openwrt/staging_dir/toolchain-x86_64_gcc-*
+          key: ${{ runner.os }}-immortalwrt-toolchain-v9-25.12-x86_64
 
       - name: 发布固件
         working-directory: ./openwrt
