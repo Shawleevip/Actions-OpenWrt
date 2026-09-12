@@ -18,9 +18,9 @@ jobs:
       - name: 优化空间
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 1024
-          temp-reserve-mb: 256
-          swap-size-mb: 2048
+          root-reserve-mb: 4096
+          temp-reserve-mb: 1024
+          swap-size-mb: 8192
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
@@ -36,8 +36,9 @@ jobs:
           TZ: Asia/Shanghai
         run: |
           set -e
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup /usr/lib/jvm /etc/mysql /etc/php || true
           sudo -E apt-get update
-          sudo -E apt-get install -y \
+          sudo -E apt-get install -y --no-install-recommends \
             ack asciidoc autoconf automake autopoint binutils bison \
             build-essential bzip2 ccache clang cmake cpio curl \
             device-tree-compiler flex gawk gettext git gperf help2man \
@@ -47,7 +48,10 @@ jobs:
             ninja-build patch pkgconf python3 python3-pyelftools \
             python3-setuptools rsync scons squashfs-tools subversion swig \
             texinfo uglifyjs unzip wget xmlto xxd zlib1g-dev scdoc
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
           sudo -E timedatectl set-timezone Asia/Shanghai
+          df -h
 
       - name: 克隆 ImmortalWrt
         env:
