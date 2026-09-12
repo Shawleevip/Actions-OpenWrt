@@ -28,7 +28,7 @@ jobs:
           remove-docker-images: 'true'
 
       - name: 检查代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 安装依赖
         env:
@@ -500,7 +500,7 @@ jobs:
 
       - name: 发布Release
         if: success()
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ImmortalWrt 25.12 x86_64 (${{ env.BUILD_DATE }})
