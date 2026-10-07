@@ -532,31 +532,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 清理Release
+      - name: 清理旧 Release
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           KEEP=30
+          REPO="${{ github.repository }}"
           gh release list \
-            --repo "${{ github.repository }}" \
+            --repo "$REPO" \
             --limit 500 \
             --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[].tagName' \
-            > all_tags.txt
-
-          TOTAL=$(wc -l < all_tags.txt)
-          if [ "$TOTAL" -gt "$KEEP" ]; then
-            tail -n +"$((KEEP + 1))" all_tags.txt |
-            while read -r TAG; do
-              [ -z "$TAG" ] && continue
-              gh release delete "$TAG" \
-                --repo "${{ github.repository }}" \
-                --yes \
-                --cleanup-tag
-            done
-          fi
+            --jq 'sort_by(.createdAt) | reverse | .[].tagName' > all_tags.txt
+          tail -n +"$((KEEP + 1))" all_tags.txt | while read -r TAG; do
+            [ -z "$TAG" ] && continue
+            [ "$TAG" = "${RELEASE_TAG:-}" ] && continue
+            echo "删除旧 Release: $TAG"
+            gh release delete "$TAG" --repo "$REPO" --yes --cleanup-tag
+          done
+          echo "Release 清理完成"
 
       - name: 最终总结
         if: always()
